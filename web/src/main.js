@@ -122,13 +122,14 @@ const VIEWS = {
   front: { dir: [0, 0.06, 1], target: [0, 0, 0], size: [2.45, 1.08], margin: 1.3 },
   back: { dir: [0.28, 0.25, -1], target: [0, 0, 0], size: [2.45, 1.08], margin: 1.3 },
   hero: { dir: [-0.46, 0.25, 0.85], target: [0, -0.03, 0], size: [2.45, 1.08], margin: 1.22 },
-  top: { dir: [0.05, 1, 0.42], target: [0.25, 0.45, 0], size: [2.45, 0.5], margin: 1.15 },
+  top: { dir: [0.05, 1, 0.45], target: [0, 0.42, 0], size: [2.5, 0.7], margin: 1.1 },
   bottom: { dir: [0.05, -1, 0.55], target: [0, -0.45, 0], size: [2.45, 0.5], margin: 1.15 },
   side: { dir: [-1, 0.15, 0.32], target: [-0.6, 0, 0], size: [0.9, 1.1], margin: 1.35 },
   joyl: { dir: [-0.3, 0.22, 1], target: [-1.0, 0.02, 0], size: [0.62, 1.12], margin: 1.12 },
   joyr: { dir: [0.3, 0.2, 1], target: [1.0, -0.02, 0], size: [0.62, 1.12], margin: 1.12 },
   sticks: { dir: [-0.1, 0.45, 1], target: [-1.03, 0.22, 0.08], size: [0.42, 0.42], margin: 1.2 },
   explode: { dir: [-0.42, 0.32, 0.85], target: [0, 0.05, 0], size: [3.55, 1.6], margin: 1.12 },
+  fill: { dir: [0, 0, 1], target: [0, 0, 0], size: [2.4, 1.03], margin: 1.02 },   // 整台主机铺满窗口
 };
 
 let lastView = 'hero';
@@ -260,6 +261,7 @@ const hover = { x: -1e4, y: 0, dirty: false, part: null };
 function updateHover() {
   if (!hover.dirty || !device) return;
   hover.dirty = false;
+
   const hit = pointers.size ? null : pick(hover.x, hover.y);
   let part = hit ? device.partOf(hit.object) : null;
   if (!part && hit && hit.object === tv?.userData.panel) part = { kind: 'info', label: '电视（TV 模式画面）' };
@@ -267,14 +269,20 @@ function updateHover() {
   stageEl.style.cursor = (part && part.kind !== 'info') || screenPoint(hit) ? 'pointer' : '';
   if (!part) return hideTooltip();
   let sub = '';
-  if (screenPoint(hit)) sub = '触摸屏：点击屏幕上的磁贴 / 按钮即可操作';
+  if (screenPoint(hit)) {
+    // 屏幕提示只出现前两次，之后玩游戏时不再挡画面
+    if (hover.part !== 'screen') hover.screenHints = (hover.screenHints || 0) + 1;
+    hover.part = 'screen';
+    if (hover.screenHints > 2) return hideTooltip();
+    sub = '触摸屏：点击屏幕上的磁贴 / 按钮即可操作';
+  } else hover.part = part.kind;
   if (part.kind === 'button') sub = `键盘：${KEY_OF[part.btn] || '—'} · 点击即可按下`;
   else if (part.kind === 'stick') sub = `键盘：${KEY_OF[part.btn]} · 鼠标拖动可推动`;
   else if (part.kind === 'toggle' || part.kind === 'release' || part.kind === 'dock') sub = '点击操作';
   ui.tooltip.innerHTML = `${escapeHTML(part.label || '')}${sub ? `<small>${escapeHTML(sub)}</small>` : ''}`;
   ui.tooltip.style.left = Math.min(window.innerWidth - 270, hover.x + 16) + 'px';
   ui.tooltip.style.top = Math.min(window.innerHeight - 60, hover.y + 18) + 'px';
-  ui.tooltip.classList.add('show');
+  if (!document.body.classList.contains('clean')) ui.tooltip.classList.add('show');   // 隐藏文字模式下不弹提示
 }
 function hideTooltip() { ui.tooltip.classList.remove('show'); }
 function escapeHTML(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -438,6 +446,61 @@ function addShot(url) {
   setTimeout(() => a.style.opacity = '0.85', 4000);
 }
 
+// ------------------------------------------------------------------ 隐藏文字 / 放大游戏机
+const tText = $('#tText'), tFill = $('#tFill');
+function setClean(on) {
+  document.body.classList.toggle('clean', on);
+  tText.setAttribute('aria-pressed', String(on));
+  tText.textContent = on ? '显示文字' : '隐藏文字';
+  hideTooltip();
+  onResize();          // 面板隐藏后画面中心回到窗口正中
+}
+let fillBack = null;    // 放大前的相机位置，再按一次恢复
+function setFill(on) {
+  if (!device) return;
+  if (on) {
+    fillBack = { pos: camera.position.toArray(), tgt: controls.target.toArray(), panel: false };
+    // 桌面端先把右侧面板收起来，主机才能用上整个窗口
+    if (!isNarrow() && !ui.panel.classList.contains('collapsed')) {
+      ui.panel.classList.add('collapsed');
+      menuBtn.classList.add('show');
+      fillBack.panel = true;
+      onResize();
+    }
+    if (device.docked && tv) {
+      // TV 模式：让电视画面铺满窗口
+      const c = tv.position.clone();
+      const d = fitDistance(camera, 4.6, (4.6 * 9) / 16, 1.0);
+      tween.to([c.x, c.y, c.z + 0.04 + d], [c.x, c.y, c.z], 0.8);
+    } else view('fill', 0.8);
+  } else if (fillBack) {
+    if (fillBack.panel) {
+      ui.panel.classList.remove('collapsed');
+      menuBtn.classList.remove('show');
+      onResize();
+    }
+    tween.to(fillBack.pos, fillBack.tgt, 0.7);
+    fillBack = null;
+  }
+  tFill.setAttribute('aria-pressed', String(on));
+  tFill.textContent = on ? '恢复视角' : '放大游戏机';
+}
+function zoomStep(k) {
+  const off = camera.position.clone().sub(controls.target);
+  const d = THREE.MathUtils.clamp(off.length() * k, controls.minDistance, controls.maxDistance);
+  off.setLength(d);
+  tween.to(controls.target.clone().add(off).toArray(), controls.target.toArray(), 0.3);
+}
+tText.addEventListener('click', () => { setClean(!document.body.classList.contains('clean')); tText.blur(); });
+tFill.addEventListener('click', () => { setFill(tFill.getAttribute('aria-pressed') !== 'true'); tFill.blur(); });
+$('#tZoomIn').addEventListener('click', (e) => { zoomStep(0.8); e.currentTarget.blur(); });
+$('#tZoomOut').addEventListener('click', (e) => { zoomStep(1.25); e.currentTarget.blur(); });
+window.addEventListener('keydown', (e) => {
+  if (help.open || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.code === 'KeyT') setClean(!document.body.classList.contains('clean'));
+  if (e.code === 'KeyF') setFill(tFill.getAttribute('aria-pressed') !== 'true');
+});
+
 // ------------------------------------------------------------------ 主循环
 let last = performance.now();
 let lastApp = '';
@@ -452,7 +515,7 @@ function frame(now) {
     if (os.screenOn || (device.screenLevel ?? 1) > 0.005) screenTex.needsUpdate = true;
     device.update(dt, pad, os);
     // 屏幕亮度：睡眠 / 插入底座（TV 模式）时熄屏
-    const level = os.screenOn ? os.brightness : 0;
+    const level = os.screenOn ? Math.min(1, 0.25 + 0.88 * os.brightness) : 0;   // 默认亮度 0.85 ≈ 满亮
     const handheldLevel = device.docked && device.dockT > 0.97 ? 0 : level;
     device.screenLevel = THREE.MathUtils.lerp(device.screenLevel ?? 0, handheldLevel, 1 - Math.exp(-dt * 10));
     device.setScreenLevel(device.screenLevel);

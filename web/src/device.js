@@ -398,9 +398,13 @@ export class Device {
     m.emissive.setRGB(1, 1, 1);
     m.emissiveIntensity = 1;
     m.toneMapped = false;
-    m.envMapIntensity = 0.35;
-    if ('clearcoat' in m) { m.clearcoat = 0.6; m.clearcoatRoughness = 0.05; }
+    m.roughness = 0.25;
+    m.envMapIntensity = 0.12;           // 屏幕上留一点玻璃反光
+    // 清漆层会按观察角度压暗下面的自发光（斜着看时画面发灰），屏幕上不用它
+    if ('clearcoat' in m) m.clearcoat = 0;
     m.needsUpdate = true;
+    // 黑色玻璃边框的环境反射也压一压
+    for (const p of this.pickables) if (p.material.name === 'Glass') p.material.envMapIntensity = 0.55;
     // 屏幕材质不参与悬停/按压特效
     this.fx.delete(this.pickables.find((p) => p.material === m));
   }

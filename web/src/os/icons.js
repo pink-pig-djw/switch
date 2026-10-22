@@ -386,3 +386,242 @@ export function iconJoyCon(ctx, cx, cy, s, side) {
   ctx.fill();
   ctx.restore();
 }
+
+// ———————————————————— HOME 圆形按钮用的线条图标 ————————————————————
+function strokeStyle(ctx, color, s) {
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(2, s * 0.075);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+}
+
+export function lineNews(ctx, cx, cy, s, color) {
+  ctx.save();
+  strokeStyle(ctx, color, s);
+  rrect(ctx, cx - s * 0.36, cy - s * 0.3, s * 0.72, s * 0.6, s * 0.07);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.rect(cx - s * 0.24, cy - s * 0.17, s * 0.2, s * 0.17);
+  ctx.stroke();
+  for (const [x0, y, x1] of [[0.04, -0.15, 0.24], [0.04, -0.03, 0.24], [-0.24, 0.1, 0.24], [-0.24, 0.2, 0.12]]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + s * x0, cy + s * y);
+    ctx.lineTo(cx + s * x1, cy + s * y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+export function lineAlbum(ctx, cx, cy, s, color) {
+  ctx.save();
+  strokeStyle(ctx, color, s);
+  rrect(ctx, cx - s * 0.36, cy - s * 0.28, s * 0.72, s * 0.56, s * 0.07);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.3, cy + s * 0.2);
+  ctx.lineTo(cx - s * 0.08, cy - s * 0.04);
+  ctx.lineTo(cx + s * 0.06, cy + s * 0.1);
+  ctx.lineTo(cx + s * 0.14, cy + s * 0.02);
+  ctx.lineTo(cx + s * 0.3, cy + s * 0.2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx + s * 0.16, cy - s * 0.12, s * 0.055, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+export function lineControllers(ctx, cx, cy, s, color) {
+  ctx.save();
+  strokeStyle(ctx, color, s);
+  const w = s * 0.2, h = s * 0.6, r = w * 0.9;
+  const joy = (x, left) => {
+    ctx.beginPath();
+    const y = cy - h / 2;
+    if (left) {
+      ctx.moveTo(x + w, y);
+      ctx.lineTo(x + r, y);
+      ctx.arcTo(x, y, x, y + r, r);
+      ctx.lineTo(x, y + h - r);
+      ctx.arcTo(x, y + h, x + r, y + h, r);
+      ctx.lineTo(x + w, y + h);
+    } else {
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y, x + w, y + r, r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+      ctx.lineTo(x, y + h);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  };
+  joy(cx - s * 0.25, true);
+  joy(cx + s * 0.05, false);
+  ctx.beginPath();
+  ctx.arc(cx - s * 0.14, cy - s * 0.12, s * 0.05, 0, Math.PI * 2);
+  ctx.arc(cx + s * 0.14, cy + s * 0.08, s * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+export function lineGear(ctx, cx, cy, s, color) {
+  ctx.save();
+  strokeStyle(ctx, color, s);
+  const teeth = 8, r1 = s * 0.33, r2 = s * 0.25;
+  ctx.beginPath();
+  for (let i = 0; i < teeth * 2; i++) {
+    const a0 = (i * Math.PI) / teeth - Math.PI / teeth / 2;
+    const r = i % 2 === 0 ? r1 : r2;
+    const a1 = a0 + Math.PI / teeth;
+    ctx.lineTo(cx + Math.cos(a0 + 0.09) * r, cy + Math.sin(a0 + 0.09) * r);
+    ctx.lineTo(cx + Math.cos(a1 - 0.09) * r, cy + Math.sin(a1 - 0.09) * r);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, s * 0.1, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+export function linePower(ctx, cx, cy, s, color) {
+  ctx.save();
+  strokeStyle(ctx, color, s);
+  ctx.beginPath();
+  ctx.arc(cx, cy + s * 0.03, s * 0.27, -Math.PI * 0.3, Math.PI * 1.3);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - s * 0.32);
+  ctx.lineTo(cx, cy - s * 0.02);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ———————————————————— 其它原创头像 ————————————————————
+export function drawAvatarTea(ctx, cx, cy, r) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#bfe9d6';
+  ctx.fill();
+  ctx.clip();
+  const s = r / 34;
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+  // 热气
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  for (const x of [-7, 5]) {
+    ctx.beginPath();
+    ctx.moveTo(x, -10);
+    ctx.quadraticCurveTo(x - 5, -16, x, -21);
+    ctx.quadraticCurveTo(x + 5, -26, x, -31);
+    ctx.stroke();
+  }
+  // 杯子
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(-20, -6);
+  ctx.lineTo(20, -6);
+  ctx.quadraticCurveTo(19, 22, 0, 23);
+  ctx.quadraticCurveTo(-19, 22, -20, -6);
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(22, 4, 6, -Math.PI / 2, Math.PI / 2);
+  ctx.stroke();
+  ctx.fillStyle = '#7bc043';
+  ctx.beginPath();
+  ctx.ellipse(0, -6, 20, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 脸
+  ctx.fillStyle = '#3a2a20';
+  ctx.beginPath();
+  ctx.arc(-7, 6, 2.2, 0, Math.PI * 2);
+  ctx.arc(7, 6, 2.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#3a2a20';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(0, 9, 3.5, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,140,140,0.6)';
+  ctx.beginPath();
+  ctx.ellipse(-12, 11, 3, 1.8, 0, 0, Math.PI * 2);
+  ctx.ellipse(12, 11, 3, 1.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#d9b48a';
+  ctx.fillRect(-26, 24, 52, 12);
+  ctx.restore();
+}
+
+export function drawAvatarCat(ctx, cx, cy, r) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#cfe4ff';
+  ctx.fill();
+  ctx.clip();
+  const s = r / 34;
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+  ctx.fillStyle = '#ffa04a';
+  // 耳朵
+  for (const d of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(d * 22, -10);
+    ctx.lineTo(d * 18, -28);
+    ctx.lineTo(d * 6, -18);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 24, 21, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffd2a8';
+  for (const d of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(d * 18, -14);
+    ctx.lineTo(d * 16, -23);
+    ctx.lineTo(d * 10, -17);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.ellipse(0, 10, 13, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 条纹
+  ctx.strokeStyle = '#e07a22';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  for (const x of [-6, 0, 6]) {
+    ctx.beginPath();
+    ctx.moveTo(x, -18);
+    ctx.lineTo(x, -11);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#3a2a20';
+  ctx.beginPath();
+  ctx.ellipse(-9, 0, 2.8, 3.6, 0, 0, Math.PI * 2);
+  ctx.ellipse(9, 0, 2.8, 3.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ff7a8a';
+  ctx.beginPath();
+  ctx.moveTo(-2.5, 6);
+  ctx.lineTo(2.5, 6);
+  ctx.lineTo(0, 9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#3a2a20';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(0, 9);
+  ctx.quadraticCurveTo(-3, 13, -6, 11);
+  ctx.moveTo(0, 9);
+  ctx.quadraticCurveTo(3, 13, 6, 11);
+  ctx.stroke();
+  ctx.restore();
+}

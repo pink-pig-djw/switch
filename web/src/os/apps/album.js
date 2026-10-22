@@ -54,6 +54,27 @@ export class Album {
     this.scroll = damp(this.scroll, target, 14, dt);
   }
 
+  // 触摸：点缩略图选中，再点一次放大；放大时点左半边 / 右半边切换，点中间返回
+  tap(x, y) {
+    const list = this.os.album;
+    if (this.view) {
+      if (x < W * 0.3 && this.sel > 0) { this.sel--; this.viewT = 0; this.os.sfx.play('tick'); }
+      else if (x > W * 0.7 && this.sel < list.length - 1) { this.sel++; this.viewT = 0; this.os.sfx.play('tick'); }
+      else if (x >= W * 0.3 && x <= W * 0.7) { this.view = false; this.os.sfx.play('back'); }
+      return true;
+    }
+    for (let i = 0; i < list.length; i++) {
+      const col = i % COLS, row = Math.floor(i / COLS);
+      const tx = X0 + col * (TW + GX), ty = Y0 + row * (TH + GY + 26) - this.scroll;
+      if (x >= tx && x <= tx + TW && y >= ty && y <= ty + TH && ty > 100 && ty < 640) {
+        if (this.sel === i) { this.view = true; this.viewT = 0; this.os.sfx.play('confirm'); }
+        else { this.sel = i; this.os.sfx.play('tick'); }
+        return true;
+      }
+    }
+    return false;
+  }
+
   draw(c) {
     const th = this.os.theme;
     const list = this.os.album;
@@ -97,7 +118,7 @@ export class Album {
           const pulse = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(this.t * 4.2));
           strokeRR(c, x - 4, y - 4, TW + 8, TH + 8, 11, '#ffffff', 3);
           c.globalAlpha = pulse;
-          strokeRR(c, x - 8, y - 8, TW + 16, TH + 16, 14, th.accent, 5);
+          strokeRR(c, x - 8, y - 8, TW + 16, TH + 16, 14, th.sel, 5);
           c.globalAlpha = 1;
         }
       }

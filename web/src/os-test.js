@@ -25,6 +25,12 @@ document.getElementById('joyL').onclick = () => os.setJoyCon('L', (joy.L = !joy.
 document.getElementById('joyR').onclick = () => os.setJoyCon('R', (joy.R = !joy.R));
 document.getElementById('dock').onclick = () => os.setDocked((docked = !docked));
 
+// 触摸：点击画布 = 点屏幕
+canvas.addEventListener('pointerdown', (e) => {
+  const r = canvas.getBoundingClientRect();
+  os.tap(((e.clientX - r.left) * 1280) / r.width, ((e.clientY - r.top) * 720) / r.height);
+});
+
 os.onCapture = (url) => {
   const img = new Image();
   img.src = url;

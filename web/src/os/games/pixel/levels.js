@@ -147,116 +147,140 @@ class Area {
   }
 }
 
-// ———————————————————— 1-1 草原 ————————————————————
+// ———————————————————— 1-1 茶园小径 ————————————————————
+// 布局为原创：起步教学 → 小土坡 → 木桥 + 砖拱 → 茶罐管道区（隐藏奖励房间）→ 踢壳保龄球 → 茶园梯田 → 终点阶梯
 function level11() {
-  const a = new Area('main', 216, 'field', 'field');
+  const a = new Area('main', 224, 'field', 'field');
   a.spawn('start', 3, 9);
-  a.ground(0, 69).ground(71, 86).ground(89, 153).ground(155, 216);
+  a.ground(0, 62).ground(64, 109).ground(112, 158).ground(161, 224);
   // 背景装饰
-  for (const x of [0, 48, 96, 144, 192]) a.deco('hill', x, 7.5);
-  for (const x of [11, 41, 59, 89, 107, 137, 157, 185]) a.deco('bush', x, 9);
-  for (const [x, y] of [[8, 2.5], [19, 1.6], [27, 2.8], [36, 1.8], [56, 2.4], [67, 1.6], [75, 2.8], [84, 1.8], [104, 2.4], [115, 1.6], [123, 2.8], [132, 1.8], [152, 2.4], [163, 1.6], [171, 2.8], [180, 1.8]]) a.deco('cloud', x, y);
-  for (const x of [24, 72, 120, 168]) a.deco('teabush', x, 9);
-  a.box(10, 6, 'coin');
-  a.row(16, 6, 5).box(17, 6, 'power').box(19, 6, 'coin').box(18, 2, 'coin');
-  a.enemy('slime', 22);
-  a.pipe(28, 2);
-  a.pipe(38, 3);
-  a.enemy('slime', 41).enemy('slime', 43.5);
-  a.pipe(46, 4, { to: { area: 'bonus', spawn: 'drop' } });
-  a.enemy('slime', 51).enemy('slime', 52.5);
-  a.pipe(57, 4, { exitName: 'fromBonus' });
-  a.hidden(64, 5, '1up');
-  a.row(77, 6, 3).box(78, 6, 'power');
-  a.row(80, 2, 8);
-  a.enemy('slime', 81, 1).enemy('slime', 83, 1);
-  a.row(91, 2, 3).box(94, 2, 'coin').multi(94, 6);
-  a.enemy('snail', 97);
-  a.row(100, 6, 2).brickItem(101, 6, 'power');
-  a.checkpoint(104);
-  a.box(106, 6).box(109, 6, 'coin').box(112, 6).box(109, 2, 'power');
-  a.enemy('slime', 108).enemy('slime', 110);
-  a.row(118, 6, 1);
-  a.row(121, 2, 3);
-  a.enemy('slime', 124).enemy('slime', 125.5);
-  a.row(128, 2, 4).box(129, 2, 'coin').box(130, 2, 'coin');
-  a.row(129, 6, 2);
-  a.enemy('snail', 132);
-  a.stairsUp(134, 4).stairsDown(140, 4);
-  a.stairsUp(148, 4).column(152, 4).stairsDown(155, 4);
-  a.pipe(163, 2);
-  a.row(168, 6, 4).box(170, 6, 'coin');
-  a.enemy('slime', 172).enemy('slime', 173.5);
-  a.pipe(179, 2);
-  a.stairsUp(183, 7).column(190, 7);
-  a.coinRow(193, 5, 3);
-  a.flagpole(199);
-  a.teahouse(203);
-  a.deco('fence', 197, 9).deco('fence', 201, 9);
+  for (const x of [4, 58, 108, 166, 206]) a.deco('hill', x, 7.5);
+  for (const x of [20, 44, 93, 131, 178, 214]) a.deco('bush', x, 9);
+  for (const x of [12, 34, 74, 118, 186]) a.deco('teabush', x, 9);
+  for (const [x, y] of [[6, 2.2], [17, 1.5], [31, 2.6], [45, 1.8], [61, 2.4], [79, 1.4], [94, 2.7], [108, 1.9],
+    [126, 2.3], [141, 1.5], [159, 2.6], [176, 1.8], [193, 2.2], [210, 1.6]]) a.deco('cloud', x, y);
 
-  const b = new Area('bonus', 20, 'cave', 'cave');
-  b.ground(0, 20, 10).fill(0, 0, 0, 11, GROUND).fill(1, 0, 19, 0, BRICK);
-  b.row(3, 9, 11, BRICK);
-  b.coinRow(3, 8, 11).coinRow(4, 6, 9).coinRow(5, 4, 7);
+  // ① 起步：一串橙子币教跳跃，一个道具箱，一只史莱姆
+  a.coinRow(8, 7, 3);
+  a.box(14, 6, 'coin');
+  a.enemy('slime', 21);
+  // ② 小土坡，坡后高处的道具箱里是大橙子
+  a.column(25, 1).column(26, 2).column(27, 2).column(28, 1);
+  a.box(31, 5, 'power');
+  a.enemy('slime', 35);
+  // ③ 两段木桥一路往上，接一座砖拱（拱下有两只史莱姆，拱顶上方一排币）
+  a.row(38, 8, 3, BRIDGE).row(42, 6, 3, BRIDGE).coinRow(42, 5, 3);
+  a.row(47, 6, 8).box(49, 6, 'coin').multi(52, 6);
+  a.coinRow(48, 3, 6);
+  a.enemy('slime', 50).enemy('slime', 52.5);
+  // ④ 第一个小坑，上方一道币弧
+  a.coin(61, 7).coin(62, 6).coin(63, 6).coin(64, 7);
+  // ⑤ 茶罐管道区：最高的那根能钻进去
+  a.pipe(68, 3);
+  a.enemy('slime', 73).enemy('slime', 74.5);
+  a.pipe(77, 2);
+  a.enemy('snail', 81);
+  a.pipe(86, 4, { to: { area: 'bonus', spawn: 'drop' } });
+  // ⑥ 高低两层砖台，台后藏着一个看不见的加命块
+  a.row(91, 6, 3).box(92, 6, 'power');
+  a.row(95, 3, 4).coinRow(95, 2, 4);
+  a.hidden(100, 6, '1up');
+  a.pipe(103, 2, { exitName: 'fromBonus' });
+  // ⑦ 第二个坑
+  a.coinRow(109, 6, 3);
+  // ⑧ 存档点 + 踢壳保龄球：把蜗牛壳踢出去，一路撞倒砖棚下的四只史莱姆
+  a.checkpoint(114);
+  a.enemy('snail', 119);
+  a.row(124, 6, 10).box(127, 6, 'coin').box(130, 6, 'power');
+  a.coinRow(125, 2, 8);
+  a.enemy('slime', 126).enemy('slime', 128).enemy('slime', 130).enemy('slime', 132);
+  // ⑨ 茶园梯田：三级抬高的田埂，种满茶树
+  a.fill(138, 9, 143, 9, GROUND).fill(144, 8, 149, 9, GROUND).fill(150, 7, 157, 9, GROUND);
+  a.deco('teabush', 139, 8).deco('teabush', 145, 7).deco('teabush', 151, 6);
+  a.enemy('snail', 147, 7);
+  a.coinRow(151, 4, 4);
+  // ⑩ 最后一段：茶罐、砖台、两只史莱姆，然后是终点阶梯和旗杆
+  a.pipe(166, 3);
+  a.enemy('slime', 171);
+  a.row(174, 6, 4).box(175, 6, 'coin').multi(176, 6);
+  a.enemy('slime', 180).enemy('slime', 181.5);
+  a.stairsUp(186, 6).column(192, 6);
+  a.coinRow(195, 3, 3);
+  a.flagpole(200);
+  a.teahouse(204);
+  a.deco('fence', 198, 9).deco('fence', 212, 9);
+
+  // 隐藏奖励房间：一个橙子形状的币阵 + 加命箱，按 ↓ 从茶罐回去
+  const b = new Area('bonus', 22, 'cave', 'cave');
+  b.ground(0, 22, 10).fill(0, 0, 0, 11, HARD).fill(21, 0, 21, 11, HARD).fill(1, 0, 20, 0, HARD);
+  b.coinRow(5, 8, 12).coinRow(5, 7, 12).coinRow(6, 6, 10);
+  b.box(11, 4, '1up');
   b.spawn('drop', 2, 1, 'drop');
-  b.sidePipe(15, 8, { area: 'main', spawn: 'fromBonus' });
-  return { name: '1-1', label: '草原', time: 300, areas: { main: a, bonus: b }, start: { area: 'main', spawn: 'start' } };
+  b.pipe(17, 2, { to: { area: 'main', spawn: 'fromBonus' } });
+  return { name: '1-1', label: '茶园小径', time: 300, areas: { main: a, bonus: b }, start: { area: 'main', spawn: 'start' } };
 }
 
-// ———————————————————— 1-2 地下 ————————————————————
+// ———————————————————— 1-2 地下茶窖 ————————————————————
+// 布局为原创：斜排道具箱 → 上下两条路的矮隧道 → 石柱厅（奖励房间）→ 升降台深坑 → 砖墙小屋 → 茶罐出口
 function level12() {
-  const a = new Area('main', 196, 'cave', 'cave');
+  const a = new Area('main', 200, 'cave', 'cave');
   a.spawn('start', 2, 9);
-  a.ground(0, 80).ground(100, 120).ground(124, 128).ground(132, 196);
-  a.fill(0, 0, 0, 9, BRICK);
-  a.row(6, 1, 140).row(6, 0, 140, HARD);
-  a.box(10, 6, 'power').box(11, 6).box(12, 6).box(13, 6).box(14, 6);
-  a.enemy('slime', 16).enemy('slime', 17.5);
-  a.column(18, 1).column(20, 2).column(22, 3).column(24, 4).column(26, 4).column(28, 3);
-  a.coinRow(23, 4, 4);
-  a.enemy('slime', 30);
-  a.fill(32, 5, 33, 7, BRICK).fill(36, 5, 36, 7, BRICK).fill(37, 7, 38, 7, BRICK).fill(39, 5, 39, 7, BRICK);
-  a.coinRow(37, 6, 2);
-  a.brickItem(33, 5, 'power');
-  a.enemy('hedge', 42);
-  a.fill(44, 5, 45, 9, BRICK).coinRow(44, 4, 2);
-  a.row(48, 6, 10).multi(52, 6);
-  a.enemy('hedge', 50).enemy('slime', 54).enemy('slime', 55.5);
-  a.pipe(60, 3);
-  a.pipe(64, 4, { to: { area: 'bonus', spawn: 'drop' } });
-  a.enemy('snail', 68);
-  a.pipe(72, 2, { exitName: 'fromBonus' });
-  a.coinRow(80, 5, 3);
-  a.lift(84, 7, 'h', 22, 0.9);
-  a.lift(90, 6, 'v', 24, 1.1);
-  a.lift(96, 7, 'h', 22, 1.0);
-  a.checkpoint(102);
-  a.row(106, 6, 6).box(108, 6, 'power').hidden(111, 2, '1up');
-  a.enemy('hedge', 109).enemy('snail', 114);
-  a.row(120, 9, 4, BRIDGE).row(128, 9, 4, BRIDGE);
-  a.coinRow(120, 7, 4).coinRow(128, 7, 4);
-  a.enemy('slime', 134).enemy('slime', 135.5).enemy('hedge', 140);
-  a.stairsUp(146, 6).column(152, 6).column(153, 6);
-  a.coinRow(155, 3, 4);
-  a.enemy('slime', 160).enemy('slime', 162);
-  a.sidePipe(170, 8, { area: 'exit', spawn: 'pipe' });
-  a.fill(175, 0, 195, 11, HARD);
+  a.ground(0, 48).ground(51, 92).ground(110, 148).ground(150, 200);
+  a.fill(0, 0, 199, 0, HARD).fill(0, 1, 0, 9, HARD);
+  // ① 斜着往上排的三个道具箱
+  a.box(9, 7, 'coin').box(12, 6, 'power').box(15, 5, 'coin');
+  a.enemy('slime', 17).enemy('slime', 18.5);
+  // ② 矮隧道：下层贴地走、捡一串币；上层在砖顶上走，有刺猬和一块多币砖
+  a.row(22, 6, 23);
+  a.coinRow(24, 9, 18);
+  a.enemy('slime', 30).enemy('slime', 36).enemy('slime', 41);
+  a.enemy('hedge', 32, 5);
+  a.multi(38, 2).coinRow(26, 4, 4);
+  // ③ 石柱厅：高低错落的石柱，柱顶各有币；可以钻进去的茶罐通往奖励房间
+  for (const [x, h] of [[55, 3], [59, 1], [62, 3], [66, 2], [69, 3]]) a.column(x, h).coin(x, 9 - h).coin(x, 8 - h);
+  a.enemy('bee', 64, 5, { range: 34 });
+  a.enemy('snail', 72);
+  a.pipe(76, 3, { to: { area: 'bonus', spawn: 'drop' } });
+  a.enemy('slime', 81);
+  a.pipe(86, 2, { exitName: 'fromBonus' });
+  // ④ 深坑：三块升降台（左右 / 上下 / 左右）
+  a.lift(93, 8, 'h', 24, 0.9, 4).lift(100, 7, 'v', 16, 1.0, 4).lift(105, 8, 'h', 18, 1.0, 4);
+  a.coinRow(94, 6, 2).coinRow(101, 4, 2).coinRow(106, 6, 2);
+  // ⑤ 存档点 + 砖墙小屋：两侧是高砖墙，踩台阶翻进去、再踩屋里的石墩翻出来
+  a.checkpoint(112);
+  a.stairsUp(115, 3);
+  a.fill(118, 4, 119, 9, BRICK);
+  a.coinRow(121, 8, 7).box(124, 6, 'power');
+  a.enemy('hedge', 125);
+  a.column(128, 1).column(129, 3);
+  a.fill(130, 4, 131, 9, BRICK);
+  a.stairsDown(132, 3);
+  a.enemy('slime', 138).enemy('snail', 142);
+  // ⑥ 最后一段：小坑、隐藏加命块、通往地面的茶罐
+  a.row(156, 6, 5).box(158, 6, 'coin');
+  a.hidden(165, 6, '1up');
+  a.enemy('slime', 168).enemy('slime', 169.5).enemy('hedge', 173);
+  a.pipe(178, 3, { to: { area: 'exit', spawn: 'pipe' } });
+  a.fill(184, 0, 199, 11, HARD);
 
-  const b = new Area('bonus', 20, 'cave', 'cave');
-  b.ground(0, 20, 10).fill(0, 0, 0, 11, GROUND).fill(1, 0, 19, 0, BRICK);
-  b.coinRow(3, 8, 11).coinRow(3, 5, 11).row(3, 6, 11, BRICK);
-  b.box(8, 2, '1up');
+  const b = new Area('bonus', 22, 'cave', 'cave');
+  b.ground(0, 22, 10).fill(0, 0, 0, 11, HARD).fill(21, 0, 21, 11, HARD).fill(1, 0, 20, 0, HARD);
+  b.row(4, 6, 14, BRIDGE).coinRow(4, 5, 14).coinRow(5, 8, 12);
+  b.box(10, 2, '1up');
   b.spawn('drop', 2, 1, 'drop');
-  b.sidePipe(15, 8, { area: 'main', spawn: 'fromBonus' });
+  b.pipe(18, 2, { to: { area: 'main', spawn: 'fromBonus' } });
 
-  const e = new Area('exit', 44, 'field', 'field');
-  e.ground(0, 44);
-  e.deco('hill', 0, 7.5).deco('bush', 34, 9).deco('cloud', 6, 2).deco('cloud', 20, 1.6);
-  e.pipe(2, 2, { exitName: 'pipe' });
-  e.stairsUp(9, 7).column(16, 7);
-  e.flagpole(25);
-  e.teahouse(29);
-  return { name: '1-2', label: '地下', time: 300, areas: { main: a, bonus: b, exit: e }, start: { area: 'main', spawn: 'start' } };
+  // 出口：从茶罐里钻出来，走过两级田埂和小阶梯，抓住旗杆
+  const e = new Area('exit', 48, 'field', 'field');
+  e.ground(0, 48);
+  e.deco('hill', 14, 7.5).deco('bush', 40, 9).deco('cloud', 6, 2).deco('cloud', 24, 1.6).deco('teabush', 11, 8);
+  e.pipe(3, 2, { exitName: 'pipe' });
+  e.fill(10, 9, 13, 9, GROUND).fill(14, 8, 16, 9, GROUND);
+  e.coinRow(10, 6, 4);
+  e.stairsUp(20, 4).column(24, 4);
+  e.flagpole(31);
+  e.teahouse(35);
+  return { name: '1-2', label: '地下茶窖', time: 300, areas: { main: a, bonus: b, exit: e }, start: { area: 'main', spawn: 'start' } };
 }
 
 // ———————————————————— 1-3 天空 ————————————————————

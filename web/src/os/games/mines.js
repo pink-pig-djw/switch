@@ -268,6 +268,19 @@ export class Mines extends GameBase {
     }
   }
 
+  // 触摸：点格子 = 移动光标并翻开（已翻开的数字格 = 快速展开）
+  tap(x, y) {
+    if (this.mode !== 'play') return false;
+    const cx = Math.floor((x - this.bx()) / this.cell), cy = Math.floor((y - this.by()) / this.cell);
+    if (cx < 0 || cy < 0 || cx >= this.n || cy >= this.n) return false;
+    this.cx = cx;
+    this.cy = cy;
+    const cell = this.cells[this.idx(cx, cy)];
+    if (cell.open) this.chord(cx, cy);
+    else if (!cell.flag) this.reveal(cx, cy);
+    return true;
+  }
+
   bx() {
     return Math.round((W - this.n * this.cell) / 2);
   }

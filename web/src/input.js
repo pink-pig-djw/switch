@@ -96,8 +96,13 @@ export class Input {
     window.addEventListener('blur', () => { this.keys.clear(); this.virtual.clear(); });
   }
 
-  press(btn) { this.virtual.set(btn, (this.virtual.get(btn) || 0) + 1); }
+  press(btn) {
+    this.virtual.set(btn, (this.virtual.get(btn) || 0) + 1);
+    (this.fresh ||= new Set()).add(btn);
+  }
   release(btn) {
+    // 按下和松开落在同一帧之间（快速点击）时，推迟到下一次 poll 之后再松开，保证至少被读到一次
+    if (this.fresh?.has(btn)) { (this.deferred ||= []).push(btn); return; }
     const n = (this.virtual.get(btn) || 0) - 1;
     if (n > 0) this.virtual.set(btn, n); else this.virtual.delete(btn);
   }
@@ -147,6 +152,11 @@ export class Input {
       released[b] = !down[b] && !!this.prev[b];
     }
     this.prev = down;
+    // 这一帧已经读到了新按下的虚拟按键，执行被推迟的松开
+    this.fresh?.clear();
+    const later = this.deferred || [];
+    this.deferred = [];
+    for (const b of later) this.release(b);
     return { down, pressed, released, lx, ly, rx, ry };
   }
 }

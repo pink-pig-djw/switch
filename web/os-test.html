@@ -8,7 +8,7 @@
   :root { color-scheme: dark; }
   body { margin: 0; background: #151517; color: #ddd; font: 14px/1.5 "PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif; }
   main { max-width: 1300px; margin: 0 auto; padding: 16px; }
-  canvas { width: 100%; max-width: 1280px; aspect-ratio: 16 / 9; display: block; background: #000; border-radius: 10px; }
+  canvas { width: 100%; max-width: 1280px; aspect-ratio: 16 / 9; display: block; background: #000; border-radius: 10px; cursor: pointer; touch-action: none; }
   .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
   button { background: #2c2c30; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
   #status { margin-left: auto; color: #ffb36b; }
@@ -25,7 +25,7 @@
     <button id="dock">放入/取出 底座</button>
     <span id="status"></span>
   </div>
-  <p>键盘：左摇杆 <kbd>WASD</kbd> · 十字键 <kbd>方向键</kbd> · A <kbd>L</kbd>/<kbd>空格</kbd>/<kbd>回车</kbd> · B <kbd>K</kbd> · X <kbd>I</kbd> · Y <kbd>J</kbd> · L/ZL <kbd>Q</kbd>/<kbd>E</kbd> · R/ZR <kbd>O</kbd>/<kbd>U</kbd> · +/− <kbd>=</kbd>/<kbd>-</kbd> · HOME <kbd>H</kbd> · 截图 <kbd>C</kbd> · 电源 <kbd>P</kbd> · 音量 <kbd>]</kbd>/<kbd>[</kbd></p>
+  <p>键盘：左摇杆 <kbd>WASD</kbd> · 十字键 <kbd>方向键</kbd> · A <kbd>L</kbd>/<kbd>空格</kbd>/<kbd>回车</kbd> · B <kbd>K</kbd> · X <kbd>I</kbd> · Y <kbd>J</kbd> · L/ZL <kbd>Q</kbd>/<kbd>E</kbd> · R/ZR <kbd>O</kbd>/<kbd>U</kbd> · +/− <kbd>=</kbd>/<kbd>-</kbd> · HOME <kbd>H</kbd> · 截图 <kbd>C</kbd> · 电源 <kbd>P</kbd> · 音量 <kbd>]</kbd>/<kbd>[</kbd> · 点击画布 = 触摸屏幕</p>
   <div id="shots"></div>
 </main>
 <script type="module" src="./os-test.bundle.js"></script>

@@ -4,11 +4,11 @@ import { W, H, clamp, damp, text, textW, fillRR, strokeRR, rrect, drawHints, Nav
 import { iconGear, iconSpeaker, iconTheme, drawOrange, drawAvatar } from '../icons.js';
 
 const ITEMS = [
-  { id: 'brightness', label: '屏幕亮度' },
-  { id: 'volume', label: '音量' },
+  { id: 'brightness', label: '亮度' },
   { id: 'theme', label: '主题' },
+  { id: 'volume', label: '音量' },
   { id: 'keys', label: '按键说明' },
-  { id: 'about', label: '关于本机' },
+  { id: 'about', label: '关于' },
 ];
 
 const SIDE_W = 380;
@@ -57,6 +57,41 @@ export class Settings {
     this.selY = damp(this.selY, this.sel, 20, dt);
   }
 
+  // 触摸：点左侧分类 = 选中；点滑杆 = 设置数值；点主题卡片 = 切换
+  tap(x, y) {
+    const os = this.os;
+    for (let i = 0; i < ITEMS.length; i++) {
+      const iy = 136 + i * 70;
+      if (x < SIDE_W && y >= iy && y <= iy + 58) {
+        if (this.sel !== i) { this.sel = i; os.sfx.play('tick'); }
+        return true;
+      }
+    }
+    const id = ITEMS[this.sel].id;
+    const px = SIDE_W + 60, pw = W - SIDE_W - 120;
+    if (id === 'brightness' || id === 'volume') {
+      const bx = px + 70, bw = pw - 200, by = 260;
+      if (y > by - 40 && y < by + 40 && x > bx - 30 && x < bx + bw + 30) {
+        const v = clamp((x - bx) / bw, 0, 1);
+        if (id === 'brightness') os.setSetting('brightness', Math.round((0.1 + v * 0.9) * 20) / 20);
+        else os.setSetting('volume', Math.round(v * 16));
+        os.sfx.play('tick');
+        this.changeT = 0.3;
+        return true;
+      }
+    } else if (id === 'theme') {
+      for (let i = 0; i < 2; i++) {
+        const cx = px + i * 340;
+        if (x >= cx && x <= cx + 300 && y >= 190 && y <= 400) {
+          os.setSetting('theme', i === 0 ? 'light' : 'dark');
+          os.sfx.play('confirm');
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   draw(c) {
     const os = this.os;
     const th = os.theme;
@@ -73,12 +108,12 @@ export class Settings {
     c.fillRect(30, 108, SIDE_W - 60, 2);
     const iy0 = 136, ih = 70;
     const sy = iy0 + this.selY * ih;
-    fillRR(c, 24, sy, SIDE_W - 48, 58, 10, th.selBg);
-    c.fillStyle = th.accent;
-    fillRR(c, 30, sy + 12, 5, 34, 3, th.accent);
+    fillRR(c, 24, sy, SIDE_W - 48, 58, 6, th.selBg);
+    fillRR(c, 30, sy + 10, 5, 38, 3, th.sel);
+    strokeRR(c, 22, sy - 2, SIDE_W - 44, 62, 8, th.sel, 3);
     for (let i = 0; i < ITEMS.length; i++) {
       const sel = i === this.sel;
-      text(c, ITEMS[i].label, 56, iy0 + i * ih + 30, 24, sel ? th.accent : th.text, 'left', sel ? 700 : 500);
+      text(c, ITEMS[i].label, 56, iy0 + i * ih + 30, 24, sel ? th.selText : th.text, 'left', sel ? 700 : 500);
     }
 
     // 右侧内容
@@ -115,7 +150,7 @@ export class Settings {
       iconSpeaker(c, bx + bw + 50, by, 48, th.text, 1);
     }
     fillRR(c, bx, by - 6, bw, 12, 6, th.line);
-    fillRR(c, bx, by - 6, Math.max(12, bw * v), 12, 6, th.accent);
+    fillRR(c, bx, by - 6, Math.max(12, bw * v), 12, 6, th.sel);
     const kx = bx + bw * v;
     const s = 1 + this.changeT * 0.6;
     c.fillStyle = th.shadow;
@@ -126,7 +161,7 @@ export class Settings {
     c.beginPath();
     c.arc(kx, by, 20 * s, 0, Math.PI * 2);
     c.fill();
-    c.strokeStyle = th.accent;
+    c.strokeStyle = th.sel;
     c.lineWidth = 4;
     c.stroke();
     text(c, label, bx + bw / 2, by + 74, 34, th.text, 'center', 700);
@@ -157,9 +192,9 @@ export class Settings {
       if (this.os.settings.theme === o.id) {
         const pulse = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(this.t * 4.2));
         c.globalAlpha = pulse;
-        strokeRR(c, cx - 7, cy - 7, cw + 14, ch + 14, 18, th.accent, 5);
+        strokeRR(c, cx - 7, cy - 7, cw + 14, ch + 14, 18, th.sel, 5);
         c.globalAlpha = 1;
-        c.fillStyle = th.accent;
+        c.fillStyle = th.sel;
         c.beginPath();
         c.arc(cx + cw - 22, cy + 22, 14, 0, Math.PI * 2);
         c.fill();
@@ -186,7 +221,7 @@ export class Settings {
       const cy = y + 50 + row * rowH;
       fillRR(c, cx, cy, colW, rowH - 8, 10, th.panel);
       const [btn, keys] = KEY_HELP[i];
-      text(c, btn, cx + 16, cy + (rowH - 8) / 2 + 1, 18, th.accent, 'left', 700);
+      text(c, btn, cx + 16, cy + (rowH - 8) / 2 + 1, 18, th.selText, 'left', 700);
       let size = 18;
       while (textW(c, keys, size, 500) > colW - 150 && size > 12) size--;
       text(c, keys, cx + colW - 16, cy + (rowH - 8) / 2 + 1, size, th.text, 'right', 500);
@@ -199,8 +234,8 @@ export class Settings {
     text(c, '版本 1.0 · 运行在 three.js 3D 模型的屏幕纹理上', x + 140, y + 96, 20, th.sub, 'left', 500);
     const lines = [
       ['屏幕', '1280 × 720（与原版掌机屏幕分辨率相同）'],
-      ['内置软件', '橙子冒险、星际射击、打砖块、贪吃蛇、2048'],
-      ['系统工具', '相册、手柄测试、系统设置'],
+      ['内置软件', '橙子大冒险、方块消除、星际射击、双人乒乓、打砖块、扫雷、贪吃蛇、2048'],
+      ['系统工具', '新闻、相册、手柄测试、系统设置、触摸操作'],
       ['美术与音效', '全部由代码实时绘制 / 合成，没有使用任何图片或音频文件'],
     ];
     lines.forEach(([k, v], i) => {

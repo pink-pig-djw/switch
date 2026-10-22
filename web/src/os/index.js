@@ -70,6 +70,8 @@ export class ConsoleOS {
     this.captureReq = false;
     this.onCapture = null;
     this.battery = null;
+    this.pendingTap = null;
+    this.joyNotice = null;
 
     try {
       if (navigator.getBattery) {
@@ -117,7 +119,14 @@ export class ConsoleOS {
     if (this.joycon[side] === attached) return;
     this.joycon[side] = attached;
     this.sfx.play('click', { minGap: 0 });
-    this.toast(`Joy-Con（${side === 'L' ? '左' : '右'}）${attached ? '已连接' : '已拆下'}`, { icon: 'joycon' + side, silent: true });
+    // 参照真机：从屏幕左 / 右边缘滑出手柄小图标
+    this.joyNotice = { side, attached, t: 0 };
+  }
+
+  // 触摸屏：x / y 为 1280×720 画布像素坐标
+  tap(x, y) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    this.pendingTap = { x, y };
   }
 
   setDocked(docked) {
@@ -162,6 +171,9 @@ export class ConsoleOS {
         consumed = true;
       }
     }
+    const tap = this.pendingTap;
+    this.pendingTap = null;
+    if (tap && !consumed && !this.fade) consumed = this._tap(tap.x, tap.y);
     if (!consumed) {
       if (this.powerMenu) this._updatePowerMenu(dt, p);
       else {
@@ -185,6 +197,10 @@ export class ConsoleOS {
     }
     this.volShow = Math.max(0, this.volShow - dt);
     this.flash = Math.max(0, this.flash - dt * 3);
+    if (this.joyNotice) {
+      this.joyNotice.t += dt;
+      if (this.joyNotice.t > 2.1) this.joyNotice = null;
+    }
 
     this.draw();
   }
@@ -401,18 +417,63 @@ export class ConsoleOS {
     }
     for (const b of UNLOCK_BUTTONS) {
       if (!p.pressed[b]) continue;
-      if (b === L.last) L.count++;
-      else {
-        L.last = b;
-        L.count = 1;
-      }
-      L.t = 0;
-      if (L.count >= 3) {
-        this._unlock();
-      } else {
-        this.sfx.play('lockstep', { n: L.count - 1, minGap: 0 });
-      }
+      this._lockPress(b);
       break;
+    }
+  }
+
+  _lockPress(b) {
+    const L = this.lock;
+    if (b === L.last) L.count++;
+    else {
+      L.last = b;
+      L.count = 1;
+    }
+    L.t = 0;
+    if (L.count >= 3) this._unlock();
+    else this.sfx.play('lockstep', { n: L.count - 1, minGap: 0 });
+  }
+
+  _tap(x, y) {
+    if (this.powerMenu) {
+      for (let i = 0; i < POWER_ITEMS.length; i++) {
+        const iy = 254 + i * 66;
+        if (x >= 448 && x <= 832 && y >= iy && y <= iy + 56) {
+          this.powerMenu.sel = i;
+          this._updatePowerMenu(0, { ...EMPTY_PAD, pressed: { ...EMPTY_PAD.pressed, A: true } });
+          return true;
+        }
+      }
+      return true;
+    }
+    switch (this.state) {
+      case 'lock':
+        if (this.lock.count < 3) this._lockPress('TOUCH');
+        return true;
+      case 'home':
+        return this.home.tap(x, y);
+      case 'app':
+        if (this.paused) {
+          for (let i = 0; i < PAUSE_ITEMS.length; i++) {
+            const iy = 286 + i * 70;
+            if (x >= 428 && x <= 852 && y >= iy && y <= iy + 58) {
+              this.pauseSel = i;
+              this._updatePause(0, { ...EMPTY_PAD, pressed: { ...EMPTY_PAD.pressed, A: true } });
+              return true;
+            }
+          }
+          return true;
+        }
+        if (this.app && this.app.tap) {
+          try {
+            return !!this.app.tap(x, y);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        return false;
+      default:
+        return false;
     }
   }
 
@@ -626,6 +687,7 @@ export class ConsoleOS {
       c.save();
       if (this.powerMenu) this._drawPowerMenu(c);
       this._drawVolume(c);
+      this._drawJoyNotice(c);
       this._drawToasts(c);
       if (this.flash > 0) {
         c.fillStyle = `rgba(255,255,255,${(this.flash * 0.8).toFixed(3)})`;
@@ -657,67 +719,76 @@ export class ConsoleOS {
       const iy = y + 116 + i * 70;
       const sel = i === this.pauseSel;
       if (sel) {
-        fillRR(c, x + 28, iy, w - 56, 58, 12, th.selBg);
+        fillRR(c, x + 28, iy, w - 56, 58, 10, th.selBg);
         const pulse = 0.65 + 0.35 * Math.sin(this.t * 5);
         c.globalAlpha = a * pulse;
-        strokeRR(c, x + 26, iy - 2, w - 52, 62, 14, th.accent, 4);
+        strokeRR(c, x + 26, iy - 2, w - 52, 62, 12, th.sel, 4);
         c.globalAlpha = a;
       }
-      text(c, PAUSE_ITEMS[i], x + 56, iy + 30, 26, sel ? th.accent : th.text, 'left', sel ? 700 : 500);
+      text(c, PAUSE_ITEMS[i], x + 56, iy + 30, 26, sel ? th.selText : th.text, 'left', sel ? 700 : 500);
     }
     drawHints(c, [['A', '确定'], ['B', '继续']], th, x + w - 30, y + h - 34, 19);
     c.globalAlpha = 1;
   }
 
   _drawLock(c) {
-    const th = this.theme;
-    const g = c.createLinearGradient(0, 0, W, H);
-    if (th.id === 'dark') {
-      g.addColorStop(0, '#26232e');
-      g.addColorStop(1, '#3b2a22');
-    } else {
-      g.addColorStop(0, '#ffe3c4');
-      g.addColorStop(1, '#ffc08a');
-    }
+    // 参照真机锁屏：深色背景，左下角大号时间与日期，右上角电量，底部中间提示
+    const g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0f0f11');
+    g.addColorStop(1, '#25252a');
     c.fillStyle = g;
     c.fillRect(0, 0, W, H);
-    // 柔和光斑
-    for (let i = 0; i < 7; i++) {
-      const x = ((i * 233 + this.t * (8 + i * 3)) % (W + 300)) - 150;
-      const y = 120 + ((i * 157) % 480);
-      const r = 60 + (i % 3) * 40;
-      c.fillStyle = th.id === 'dark' ? 'rgba(255,150,70,0.06)' : 'rgba(255,255,255,0.28)';
-      c.beginPath();
-      c.arc(x, y, r, 0, Math.PI * 2);
-      c.fill();
-    }
-    drawOrange(c, 640, 150, 34);
+    const rg = c.createRadialGradient(260, 600, 10, 260, 600, 560);
+    rg.addColorStop(0, 'rgba(255,138,46,0.16)');
+    rg.addColorStop(1, 'rgba(255,138,46,0)');
+    c.fillStyle = rg;
+    c.fillRect(0, 0, W, H);
+    this._drawBattery(c, 1196, 40, '#ffffff');
     const now = new Date();
-    const fg = th.id === 'dark' ? '#ffffff' : '#4a2f1d';
-    text(c, `${pad2(now.getHours())}:${pad2(now.getMinutes())}`, 640, 300, 132, fg, 'center', 300);
-    text(c, `${now.getMonth() + 1}月${now.getDate()}日 ${WEEK[now.getDay()]}`, 640, 392, 30, fg, 'center', 500);
-    this._drawBattery(c, 1196, 40, fg);
-
-    const L = this.lock;
-    const msg = '连按同一按键三次以解锁';
-    const pulse = 0.75 + 0.25 * Math.sin(this.t * 3);
-    c.globalAlpha = pulse;
-    text(c, msg, 640, 560, 28, fg, 'center', 500);
+    const a = easeOutCubic(this.lock.enterT / 0.5);
+    c.globalAlpha = a;
+    text(c, `${pad2(now.getHours())}:${pad2(now.getMinutes())}`, 84, 486 + (1 - a) * 20, 156, '#ffffff', 'left', 300);
+    text(c, `${now.getMonth() + 1}月${now.getDate()}日 ${WEEK[now.getDay()]}`, 92, 590, 30, 'rgba(255,255,255,0.82)', 'left', 500);
     c.globalAlpha = 1;
+    const L = this.lock;
     for (let i = 0; i < 3; i++) {
       const filled = i < L.count;
-      const cx = 640 + (i - 1) * 44;
+      const cx = 640 + (i - 1) * 40;
       c.beginPath();
-      c.arc(cx, 620, filled ? 11 : 9, 0, Math.PI * 2);
+      c.arc(cx, 640, filled ? 9 : 7, 0, Math.PI * 2);
       if (filled) {
-        c.fillStyle = th.accent;
+        c.fillStyle = this.theme.sel;
         c.fill();
       } else {
-        c.strokeStyle = fg;
-        c.lineWidth = 2.5;
+        c.strokeStyle = 'rgba(255,255,255,0.75)';
+        c.lineWidth = 2;
         c.stroke();
       }
     }
+    c.globalAlpha = 0.78 + 0.22 * Math.sin(this.t * 3);
+    text(c, '请连续按 3 次同一按键', 640, 684, 24, '#ffffff', 'center', 500);
+    c.globalAlpha = 1;
+  }
+
+  _drawJoyNotice(c) {
+    const n = this.joyNotice;
+    if (!n) return;
+    const tin = easeOutBack(clamp(n.t / 0.35, 0, 1));
+    const tout = clamp((n.t - 1.75) / 0.3, 0, 1);
+    const k = tin * (1 - tout);
+    const w = 150, h = 230, y = (H - h) / 2;
+    const left = n.side === 'L';
+    const x = left ? -w + k * (w + 20) : W - k * (w + 20);
+    fillRR(c, x, y, w, h, 22, 'rgba(28,28,30,0.92)');
+    const ix = x + w / 2, iy = y + 92;
+    const slide = n.attached ? (1 - clamp(n.t / 0.6, 0, 1)) * 18 : clamp(n.t / 0.6, 0, 1) * 18;
+    iconJoyCon(c, ix + (left ? -slide : slide), iy, 130, n.side);
+    // 玩家指示灯
+    for (let i = 0; i < 4; i++) {
+      c.fillStyle = n.attached && i === 0 ? '#5dff8a' : 'rgba(255,255,255,0.2)';
+      c.fillRect(ix - 21 + i * 12, y + 168, 8, 4);
+    }
+    text(c, n.attached ? '已连接' : '已断开', ix, y + 200, 20, '#ffffff', 'center', 600);
   }
 
   _drawBattery(c, x, y, color) {
@@ -749,12 +820,12 @@ export class ConsoleOS {
       const iy = y + 104 + i * 66;
       const sel = i === M.sel;
       if (sel) {
-        fillRR(c, x + 28, iy, w - 56, 56, 12, th.selBg);
+        fillRR(c, x + 28, iy, w - 56, 56, 10, th.selBg);
         c.globalAlpha = a * (0.65 + 0.35 * Math.sin(this.t * 5));
-        strokeRR(c, x + 26, iy - 2, w - 52, 60, 14, th.accent, 4);
+        strokeRR(c, x + 26, iy - 2, w - 52, 60, 12, th.sel, 4);
         c.globalAlpha = a;
       }
-      text(c, POWER_ITEMS[i].label, x + w / 2, iy + 29, 25, sel ? th.accent : th.text, 'center', sel ? 700 : 500);
+      text(c, POWER_ITEMS[i].label, x + w / 2, iy + 29, 25, sel ? th.selText : th.text, 'center', sel ? 700 : 500);
     }
     drawHints(c, [['A', '确定'], ['B', '取消']], th, x + w - 28, y + h - 28, 18);
     c.globalAlpha = 1;

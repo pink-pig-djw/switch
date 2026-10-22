@@ -73,7 +73,8 @@ export function createStage(container) {
     const w = container.clientWidth, h = container.clientHeight;
     renderer.setSize(w, h);
     const panel = document.getElementById('panel');
-    const shift = w > 760 && panel && !panel.classList.contains('collapsed') ? Math.round((panel.offsetWidth + 16) / 2) : 0;
+    const hidden = !panel || panel.classList.contains('collapsed') || document.body.classList.contains('clean');
+    const shift = w > 760 && !hidden ? Math.round((panel.offsetWidth + 16) / 2) : 0;
     camera.aspect = (w + shift * 2) / h;
     camera.userData.freeAspect = (w - shift * 2) / h;   // 面板左侧空白区域的宽高比
     if (shift) camera.setViewOffset(w + shift * 2, h, shift * 2, 0, w, h);

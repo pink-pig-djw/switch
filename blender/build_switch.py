@@ -654,9 +654,12 @@ def build_console(root):
         place(c, 'top', (x, yc, ZT))
         cuts.append(cutter(c, 'Gap'))
 
-    # 顶部出风口
-    c = box_bm(-30.0, 22.0, -2.5, 0.1, ZT - 3.6, ZT + 1)
-    cuts.append(cutter(c, 'PortBlack'))
+    # 顶部出风口：一排细槽，槽与槽之间的隔片就是机身本身
+    x = -29.6
+    while x < 21.6:
+        c = box_bm(x, x + 1.1, -2.5, 0.1, ZT - 3.4, ZT + 1)
+        cuts.append(cutter(c, 'PortBlack'))
+        x += 1.45
     # 3.5mm 耳机孔
     c = cyl_bm(1.95, -8.0, 1.0, 28)
     place(c, 'top', (33.0, yc, ZT))
@@ -729,13 +732,6 @@ def build_console(root):
     merge(icons, p_bm)
     new_obj('Console_TopPrint', icons, ['PrintDim'], parent=con)
 
-    # 出风口散热片
-    fins = bmesh.new()
-    x = -29.0
-    while x < 21.6:
-        merge(fins, box_bm(x - 0.17, x + 0.17, -2.5, 0.1, ZT - 3.6, ZT - 0.6))
-        x += 1.45
-    new_obj('Console_Vent', fins, ['Plastic'], parent=con, info='散热出风口')
 
     # 耳机孔内圈
     ring = lathe([(0, -2.8), (1.9, -2.8), (1.9, -0.08), (1.6, -0.08), (1.6, -2.6), (0, -2.6)], 28)

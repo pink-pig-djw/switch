@@ -10,7 +10,8 @@ import { Pong } from './games/pong.js';
 import { Album } from './apps/album.js';
 import { Settings } from './apps/settings.js';
 import { Tester } from './apps/tester.js';
+import { News } from './apps/news.js';
 
 // HOME 菜单上的磁贴（第一个是《橙子大冒险》）
 export const GAMES = [PixelAdventure, Blocks, Shooter, Pong, Breakout, Mines, Snake, Game2048];
-export const SYSTEM_APPS = { album: Album, settings: Settings, tester: Tester };
+export const SYSTEM_APPS = { news: News, album: Album, settings: Settings, tester: Tester };

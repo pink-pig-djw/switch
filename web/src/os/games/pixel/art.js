@@ -663,8 +663,8 @@ export const THEMES = {
     brick: ['#d06a2c', '#5e2a10', '#f2a466'], hard: ['#c9804a', '#6a3a1a', '#f1b98a'],
   },
   cave: {
-    sky: '#0d1020', ground: ['#3d6fb8', '#1d3768', '#7aa6e8'], grass: null,
-    brick: ['#3d7fc0', '#16345e', '#8ec0f0'], hard: ['#5f7fa8', '#24344c', '#a9c3e0'],
+    sky: '#0c1412', ground: ['#3f7d66', '#1c3d31', '#79b89c'], grass: null,
+    brick: ['#4a8a6c', '#183a2c', '#8fd0b0'], hard: ['#6b8f7c', '#283d33', '#a9c9b6'],
   },
   sky: {
     sky: '#ffb27a', ground: ['#d9a56a', '#8f5f2f', '#f5d3a0'], grass: ['#f4f4f8', '#b9c4d8', '#ffffff'],
@@ -759,28 +759,36 @@ export function buildTiles(themeName) {
     px(c, 4, 11, 8, 1, h2);
     px(c, 11, 4, 1, 8, h2);
   });
-  // 道具箱（橙子图案，4 帧闪光）
-  const boxCols = ['#f2b630', '#ffd35c', '#ffe28a', '#ffd35c'];
-  boxCols.forEach((bc, i) => tile(`box${i}`, (c) => {
-    px(c, 0, 0, 16, 16, '#7a4a10');
-    px(c, 1, 1, 14, 14, bc);
-    px(c, 1, 1, 14, 1, '#fff2c0');
-    px(c, 1, 14, 14, 1, '#c98a18');
-    for (const [x, y] of [[2, 2], [13, 2], [2, 13], [13, 13]]) px(c, x, y, 1, 1, '#7a4a10');
-    // 橙子图标
-    px(c, 5, 6, 6, 6, '#ff8a1c');
-    px(c, 6, 5, 4, 8, '#ff8a1c');
-    px(c, 4, 7, 8, 4, '#ff8a1c');
-    px(c, 6, 6, 2, 2, '#ffd2a0');
-    px(c, 7, 3, 1, 2, '#6a3a1a');
-    px(c, 8, 3, 3, 2, '#3fae4a');
-    px(c, 9, 10, 2, 2, '#d0600c');
+  // 道具箱：木质茶箱 + 发光的橙子徽记（4 帧，徽记明暗变化）
+  const glow = ['#ff8a1c', '#ffa23c', '#ffbe62', '#ffa23c'];
+  const crate = (c) => {
+    px(c, 0, 0, 16, 16, '#5a3214');
+    px(c, 1, 1, 14, 14, '#c98a4a');
+    for (const y of [5, 10]) px(c, 1, y, 14, 1, '#9a6230');      // 木板缝
+    px(c, 1, 1, 14, 1, '#e8b47a');
+    px(c, 1, 1, 1, 14, '#e8b47a');
+    px(c, 14, 1, 1, 14, '#8a5426');
+    px(c, 1, 14, 14, 1, '#8a5426');
+  };
+  glow.forEach((gc, i) => tile(`box${i}`, (c) => {
+    crate(c);
+    // 圆形徽记底
+    px(c, 4, 4, 8, 8, '#5a3214');
+    px(c, 5, 3, 6, 10, '#5a3214');
+    px(c, 3, 5, 10, 6, '#5a3214');
+    // 橙子
+    px(c, 5, 5, 6, 6, gc);
+    px(c, 6, 4, 4, 8, gc);
+    px(c, 4, 6, 8, 4, gc);
+    px(c, 6, 5, 2, 2, '#fff0d0');
+    px(c, 8, 2, 1, 2, '#3a2410');
+    px(c, 9, 2, 2, 1, '#4fc25a');
   }));
   tile('used', (c) => {
-    px(c, 0, 0, 16, 16, '#4a2a14');
-    px(c, 1, 1, 14, 14, '#9a6234');
-    px(c, 1, 14, 14, 1, '#6a3e1e');
-    for (const [x, y] of [[2, 2], [13, 2], [2, 13], [13, 13]]) px(c, x, y, 1, 1, '#4a2a14');
+    px(c, 0, 0, 16, 16, '#3a2414');
+    px(c, 1, 1, 14, 14, '#7a5636');
+    for (const y of [5, 10]) px(c, 1, y, 14, 1, '#5e3e22');
+    px(c, 5, 5, 6, 6, '#5e3e22');
   });
   // 茶罐管道
   const canTop = (c, left) => {
@@ -901,17 +909,19 @@ export function buildDecor(themeName) {
     D[name] = cv;
   };
   mk('hill', 80, 40, (c) => {
+    // 茶园梯田小山：圆顶山坡上横着一行行茶树
+    const halfAt = (y) => Math.round(Math.sqrt(Math.max(0, 1 - Math.pow((40 - y) / 40, 2))) * 40);
     for (let y = 0; y < 40; y++) {
-      const half = Math.round(Math.sqrt(Math.max(0, 1 - Math.pow((40 - y) / 40, 2))) * 40);
-      px(c, 40 - half, y, half * 2, 1, '#5cb84a');
+      const half = halfAt(y);
+      px(c, 40 - half, y, half * 2, 1, '#78c25a');
     }
-    for (let y = 2; y < 40; y++) {
-      const half = Math.round(Math.sqrt(Math.max(0, 1 - Math.pow((40 - y) / 40, 2))) * 40);
-      px(c, 40 - half, y, 2, 1, '#2f7a2a');
-      px(c, 40 + half - 2, y, 2, 1, '#2f7a2a');
-    }
-    for (const [x, y] of [[30, 16], [48, 22], [38, 30], [56, 32], [22, 30]]) {
-      px(c, x, y, 3, 6, '#2f7a2a');
+    for (const y of [9, 17, 25, 33]) {
+      const half = halfAt(y) - 2;
+      for (let x = 40 - half; x < 40 + half; x += 5) {
+        px(c, x, y - 2, 4, 3, '#3f8f3a');
+        px(c, x + 1, y - 3, 2, 1, '#9ee07a');
+      }
+      px(c, 40 - half, y + 1, half * 2, 1, '#5aa548');
     }
   });
   mk('bush', 48, 16, (c) => {
