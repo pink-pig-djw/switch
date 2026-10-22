@@ -406,11 +406,56 @@ window.addEventListener('keydown', (e) => {
   os?.unlockAudio();
 });
 
-// 网页以 Artifact 形式发布时，查看器的沙箱不允许下载文件：隐藏下载类功能
+// 保存文件：发布成 Artifact 时查看器的沙箱不允许页面直接下载，要通过平台的 downloads 能力
+// （会先弹确认框）；本地打开的单文件版本用普通的下载链接。
 const IN_ARTIFACT = !!window.__ARTIFACT__;
-if (IN_ARTIFACT) {
-  document.querySelector('[data-act=photo]')?.remove();
-  document.querySelector('[data-act=help]')?.classList.add('wide');
+const downloadsP = IN_ARTIFACT && window.claude?.use ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+let canSave = !IN_ARTIFACT;
+const photoChip = document.querySelector('[data-act=photo]');
+const helpChip = document.querySelector('[data-act=help]');
+function showPhotoChip(on) {
+  photoChip.hidden = !on;
+  helpChip.classList.toggle('wide', !on);     // 少一个按钮时让最后一个占满一行
+}
+if (IN_ARTIFACT) showPhotoChip(false);
+downloadsP.then((dl) => {
+  if (!dl) return;
+  canSave = true;
+  showPhotoChip(true);
+});
+
+function dataURLToBytes(url) {
+  const bin = atob(url.slice(url.indexOf(',') + 1));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function saveFile(filename, data) {
+  if (!IN_ARTIFACT) {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/png' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    return;
+  }
+  const dl = await downloadsP;
+  if (!dl) { os?.notify('这里不能保存文件'); return; }
+  try {
+    await dl.save({ filename, data });
+  } catch (e) {
+    if (e?.code === 'declined') return;
+    if (e?.code === 'rate_limited') { os?.notify('保存窗口已经打开，请先处理它'); return; }
+    os?.notify('保存失败：' + (e?.message || e?.code || '未知原因'));
+  }
+}
+
+function stamp() {
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
 }
 
 function toggleFullscreen() {
@@ -422,28 +467,22 @@ function toggleFullscreen() {
 // 3D 画面截图（在同一帧里先渲染再读取，不需要 preserveDrawingBuffer）
 function savePhoto() {
   renderer.render(scene, camera);
-  const a = document.createElement('a');
-  a.href = renderer.domElement.toDataURL('image/png');
-  a.download = 'switch-3d.png';
-  a.click();
+  renderer.domElement.toBlob((blob) => blob && saveFile(`switch-3d-${stamp()}.png`, blob), 'image/png');
 }
 
-// 游戏截图（主机的截图键）
+// 游戏截图（主机的截图键）：左下角出现缩略图，点一下保存
 function addShot(url) {
-  const a = document.createElement(IN_ARTIFACT ? 'div' : 'a');
-  const d = new Date();
-  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
+  const a = document.createElement('button');
   a.className = 'shot';
-  if (!IN_ARTIFACT) {
-    a.href = url;
-    a.download = `switch-截图-${stamp}.png`;
-    a.title = '点击保存截图';
-  }
-  a.innerHTML = `<img alt="游戏截图"><span>${IN_ARTIFACT ? '已截图 · 在主机相册里查看' : '已截图 · 点击保存'}</span>`;
+  a.type = 'button';
+  a.title = '点击保存截图';
+  a.innerHTML = `<img alt="游戏截图"><span></span>`;
   a.querySelector('img').src = url;
+  a.querySelector('span').textContent = canSave ? '已截图 · 点击保存' : '已截图 · 在主机相册里查看';
+  a.addEventListener('click', () => { if (canSave) saveFile(`switch-截图-${stamp()}.png`, dataURLToBytes(url)); });
   ui.shots.prepend(a);
   while (ui.shots.children.length > 3) ui.shots.lastChild.remove();
-  setTimeout(() => a.style.opacity = '0.85', 4000);
+  setTimeout(() => (a.style.opacity = '0.85'), 4000);
 }
 
 // ------------------------------------------------------------------ 隐藏文字 / 放大游戏机

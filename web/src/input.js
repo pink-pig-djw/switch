@@ -81,6 +81,8 @@ const GAMEPAD_BUTTONS = {
 export class Input {
   constructor(target = window) {
     this.keys = new Set();          // 按住的键盘 code
+    this.freshKeys = new Set();     // 上次 poll 之后才按下的键
+    this.lateKeyUps = new Set();    // 推迟到下一次 poll 之后的松开
     this.virtual = new Map();       // 鼠标点住的 3D 按键（按键名 → 计数）
     this.virtualStick = { L: [0, 0], R: [0, 0] };
     this.prev = {};
@@ -90,10 +92,15 @@ export class Input {
       if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
       if (!(e.code in KEYMAP) && !(e.code in STICK_KEYS)) return;
       e.preventDefault();
+      if (!this.keys.has(e.code)) this.freshKeys.add(e.code);
       this.keys.add(e.code);
     });
-    target.addEventListener('keyup', (e) => { this.keys.delete(e.code); });
-    window.addEventListener('blur', () => { this.keys.clear(); this.virtual.clear(); });
+    target.addEventListener('keyup', (e) => {
+      // 两次 poll 之间按下又松开（快速点按或帧率很低）时，等下一次 poll 读到后再松开
+      if (this.freshKeys.has(e.code)) this.lateKeyUps.add(e.code);
+      else this.keys.delete(e.code);
+    });
+    window.addEventListener('blur', () => { this.keys.clear(); this.freshKeys.clear(); this.lateKeyUps.clear(); this.virtual.clear(); });
   }
 
   press(btn) {
@@ -152,7 +159,10 @@ export class Input {
       released[b] = !down[b] && !!this.prev[b];
     }
     this.prev = down;
-    // 这一帧已经读到了新按下的虚拟按键，执行被推迟的松开
+    // 这一帧已经读到了新按下的按键，执行被推迟的松开
+    this.freshKeys.clear();
+    for (const code of this.lateKeyUps) this.keys.delete(code);
+    this.lateKeyUps.clear();
     this.fresh?.clear();
     const later = this.deferred || [];
     this.deferred = [];
