@@ -121,7 +121,7 @@ export class PixelAdventure extends GameBase {
 
   goIntro(levelIdx, fresh = true) {
     if (fresh || levelIdx !== this.levelIdx) this.checkpointHit = false;
-    this.levelIdx = levelIdx;
+    this.prepareLevel(levelIdx);
     this.sfx.music.stop();
     this.setMode('intro');
   }
@@ -395,8 +395,13 @@ export class PixelAdventure extends GameBase {
         if (p.vx !== 0 && Math.sign(p.vx) !== ax) {
           p.vx += ax * SKID * dt;
           p.skid = Math.abs(p.vx) > 30;
-        } else {
+        } else if (Math.abs(p.vx) < maxV) {
           p.vx += ax * (run ? ACC_RUN : ACC) * dt;
+          if (Math.abs(p.vx) > maxV) p.vx = ax * maxV;
+          p.skid = false;
+        } else {
+          // 松开 B 后从跑步速度慢慢降到走路速度
+          p.vx = ax * Math.max(maxV, Math.abs(p.vx) - DEC * dt);
           p.skid = false;
         }
         p.face = ax;
@@ -406,7 +411,6 @@ export class PixelAdventure extends GameBase {
         if (Math.sign(p.vx) !== s) p.vx = 0;
         p.skid = false;
       }
-      if (Math.abs(p.vx) > maxV) p.vx = Math.sign(p.vx) * Math.max(maxV, Math.abs(p.vx) - DEC * dt);
     } else if (ax !== 0) {
       p.vx += ax * AIR * dt;
       const lim = Math.max(maxV, Math.abs(p.airMax || 0));

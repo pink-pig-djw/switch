@@ -125,6 +125,47 @@ export class Device {
 
     this.ledBlink = { L: 0, R: 0 };
     this.homeGlow = 0;
+    this.buildExplode();
+  }
+
+  // 爆炸视图：每个部件沿“离开机身”的方向分开（单位 mm，父节点坐标系）
+  buildExplode() {
+    const items = [];
+    const add = (node, dir) => node && items.push({ node, rest: node.position.clone(), dir: new THREE.Vector3(...dir) });
+    const byName = (n) => this.model.getObjectByName(n);
+    for (const b of this.buttons.values()) {
+      if (b.press) b.explode = b.press.clone().normalize().multiplyScalar(-15);
+      else b.explode = new THREE.Vector3(b.node.position.x > 0 ? 7 : -7, 11, -9);   // ZL / ZR：往上往后
+    }
+    for (const s of Object.values(this.sticks)) s.explode = new THREE.Vector3(0, 0, 24);
+    add(byName('Console_Glass'), [0, 0, 22]);
+    add(byName('GameCardCover'), [0, 12, 0]);
+    add(byName('Kickstand'), [0, 0, -14]);
+    add(byName('Console_GameCard'), [0, 36, 0]);
+    add(byName('Console_Vent'), [0, 8, 0]);
+    add(byName('Console_Jack'), [0, 10, 0]);
+    add(byName('Console_USBC'), [0, -10, 0]);
+    add(byName('Console_Screws'), [0, 0, -8]);
+    add(byName('Console_TopPrint'), [0, 3, 0]);
+    add(byName('HomeRing'), [0, 0, 9]);
+    add(byName('IRCamera'), [0, -9, 0]);
+    for (const side of ['L', 'R']) {
+      const sx = side === 'L' ? 1 : -1;                // 滑轨朝向主机
+      add(byName(`JoyCon_${side}_Rail`), [sx * 4, 0, 0]);
+      add(byName(`JoyCon_${side}_RailPrint`), [sx * 10, 0, 0]);
+      add(byName(`JoyCon_${side}_Pins`), [sx * 10, 0, 0]);
+      add(byName(`JoyCon_${side}_Latch`), [sx * 10, 0, 0]);
+      add(byName(`Sync_${side}`), [sx * 10, 0, 0]);
+      this.leds[side].forEach((m) => add(m, [sx * 10, 0, 0]));
+    }
+    this.explodeItems = items;
+    this.explodeT = 0;
+    this.exploded = false;
+  }
+
+  setExploded(on) {
+    this.exploded = on;
+    this.emit('explode', on);
   }
 
   on(name, fn) { (this.listeners[name] ||= []).push(fn); }
@@ -174,6 +215,7 @@ export class Device {
   toggle(name, open) {
     const t = this.toggles[name];
     if (!t) return;
+    if (name === 'kickstand' && this.docked && (open ?? !t.open)) return;   // 插在底座里时支架打不开
     t.open = open ?? !t.open;
     this.emit('toggle', name, t.open);
   }
@@ -191,8 +233,11 @@ export class Device {
 
   setDocked(docked) {
     if (!this.dock || this.dockAnim || docked === this.docked) return;
-    // 插底座前先把拆下的 Joy-Con 装回去
-    if (docked) for (const s of ['L', 'R']) if (!this.joycons[s].attached) this.toggleJoyCon(s, true);
+    // 插底座前先把拆下的 Joy-Con 装回去、收起支架
+    if (docked) {
+      for (const s of ['L', 'R']) if (!this.joycons[s].attached) this.toggleJoyCon(s, true);
+      if (this.toggles.kickstand?.open) this.toggle('kickstand', false);
+    }
     this.dockAnim = { from: this.dockT, to: docked ? 1 : 0, time: 0, duration: 1.7 };
     this.docked = docked;
     this.dock.visible = true;
@@ -209,11 +254,15 @@ export class Device {
   // ---------- 每帧 ----------
   update(dt, pad, os) {
     const down = pad.down;
+    this.explodeT = approach(this.explodeT, this.exploded ? 1 : 0, 4.5, dt);
+    const ex = ease(Math.min(1, this.explodeT * 1.02));
+    for (const it of this.explodeItems) it.node.position.copy(it.rest).addScaledVector(it.dir, ex);
     // 按键
     for (const [name, b] of this.buttons) {
       const target = down[name] ? 1 : 0;
       b.t = approach(b.t, target, target ? 45 : 28, dt);
-      if (b.press) b.node.position.copy(b.restPos).addScaledVector(b.press, b.t);
+      b.node.position.copy(b.restPos).addScaledVector(b.explode, ex);
+      if (b.press) b.node.position.addScaledVector(b.press, b.t);
       if (b.axis) {
         b.node.quaternion.copy(b.restQuat).multiply(new THREE.Quaternion().setFromAxisAngle(b.axis, b.angle * b.t));
       }
@@ -230,7 +279,7 @@ export class Device {
       s.node.rotation.set(-s.y * s.tilt, s.x * s.tilt, 0);
       const pt = down[s.btn] ? 1 : 0;
       s.t = approach(s.t, pt, 40, dt);
-      s.node.position.copy(s.restPos).addScaledVector(s.press, s.t);
+      s.node.position.copy(s.restPos).addScaledVector(s.press, s.t).addScaledVector(s.explode, ex);
       for (const m of s.meshes) this.fxOf(m).press = s.t * 0.8;
     }
     // 开合部件
@@ -245,7 +294,7 @@ export class Device {
       const p = n.userData._pulse || 0;
       n.userData._pulse = Math.max(0, p - dt);
       const k = p > 0 ? Math.sin((p / 0.25) * Math.PI) : 0;
-      n.position.copy(n.userData._rest).addScaledVector(new THREE.Vector3(...n.userData.press), k);
+      n.position.copy(n.userData._rest).addScaledVector(new THREE.Vector3(...n.userData.press), k - 18 * ex);
     }
     this.updateJoyCons(dt, os);
     this.updateDock(dt, os);
@@ -266,7 +315,8 @@ export class Device {
       const b = Math.max(0, (j.t - 0.55) / 0.45);
       const up = 112 * ease(a) * (1 - ease(b));
       const out = 42 * ease(b);
-      j.node.position.set(j.restPos.x + sx * out, j.restPos.y + up, j.restPos.z + 6 * Math.sin(Math.PI * b));
+      const spread = 46 * ease(Math.min(1, this.explodeT * 1.02));
+      j.node.position.set(j.restPos.x + sx * (out + spread), j.restPos.y + up, j.restPos.z + 6 * Math.sin(Math.PI * b));
       j.node.rotation.z = -sx * 0.06 * Math.sin(Math.PI * b);
       // 滑出一半时通知系统“已拆下”，装回到底时通知“已连接”
       if (!j.notified) {

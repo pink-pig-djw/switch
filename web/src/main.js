@@ -128,6 +128,7 @@ const VIEWS = {
   joyl: { dir: [-0.3, 0.22, 1], target: [-1.0, 0.02, 0], size: [0.62, 1.12], margin: 1.12 },
   joyr: { dir: [0.3, 0.2, 1], target: [1.0, -0.02, 0], size: [0.62, 1.12], margin: 1.12 },
   sticks: { dir: [-0.1, 0.45, 1], target: [-1.03, 0.22, 0.08], size: [0.42, 0.42], margin: 1.2 },
+  explode: { dir: [-0.42, 0.32, 0.85], target: [0, 0.05, 0], size: [3.55, 1.6], margin: 1.12 },
 };
 
 let lastView = 'hero';
@@ -314,12 +315,12 @@ function syncChips() {
   const state = {
     joyL: !device.joycons.L?.attached, joyR: !device.joycons.R?.attached,
     kickstand: !!device.toggles.kickstand?.open, cardcover: !!device.toggles.cardcover?.open,
-    dock: device.docked, tags: tagsOn, spin: controls.autoRotate, wire: !!device.wire, touch: touchpad.visible,
+    dock: device.docked, explode: device.exploded, tags: tagsOn, spin: controls.autoRotate, wire: !!device.wire, touch: touchpad.visible,
   };
   const labels = {
     joyL: ['拆下左 Joy-Con', '装上左 Joy-Con'], joyR: ['拆下右 Joy-Con', '装上右 Joy-Con'],
     kickstand: ['打开支架', '收起支架'], cardcover: ['打开卡槽盖', '合上卡槽盖'],
-    dock: ['放入底座（TV 模式）', '取出主机（掌机模式）'],
+    dock: ['放入底座', '取出主机'], explode: ['爆炸视图', '合上部件'],
   };
   for (const c of chips) {
     const k = c.dataset.act;
@@ -336,6 +337,7 @@ for (const c of chips) {
     if (k === 'kickstand') { device.toggle('kickstand'); if (device.toggles.kickstand.open) view('back'); }
     if (k === 'cardcover') { device.toggle('cardcover'); if (device.toggles.cardcover.open) view('top'); }
     if (k === 'dock') device.setDocked(!device.docked);
+    if (k === 'explode') { device.setExploded(!device.exploded); view(device.exploded ? 'explode' : 'hero'); }
     if (k === 'tags') tagsOn = !tagsOn;
     if (k === 'spin') controls.autoRotate = !controls.autoRotate;
     if (k === 'wire') { device.wire = !device.wire; device.setWireframe(device.wire); }
