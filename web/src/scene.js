@@ -205,7 +205,8 @@ export function createStage(container) {
     composer.setSize(w, h);
     gtao.refresh = true;
     const panel = document.getElementById('panel');
-    const hidden = !panel || panel.classList.contains('collapsed') || document.body.classList.contains('clean');
+    const body = document.body.classList;
+    const hidden = !panel || panel.classList.contains('collapsed') || body.contains('clean') || body.contains('play');
     const shift = w > 760 && !hidden ? Math.round((panel.offsetWidth + 16) / 2) : 0;
     camera.aspect = (w + shift * 2) / h;
     camera.userData.freeAspect = (w - shift * 2) / h;   // 面板左侧空白区域的宽高比

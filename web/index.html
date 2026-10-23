@@ -143,7 +143,8 @@ kbd {
 .tool.sq { width: 38px; padding: 6px 0; font-size: 16px; line-height: 1.2; }
 .tool:hover { background: var(--panel-solid); }
 .tool:active { transform: scale(0.96); }
-.tool[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.tool[aria-pressed="true"], .tool.accent { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.tool.accent:hover { background: var(--accent); filter: brightness(1.06); }
 .tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* 隐藏文字模式：只留下主机和这一排工具按钮 */
 body.clean .brand, body.clean .panel, body.clean .hint, body.clean .menu-btn, body.clean .tags, body.clean .tooltip {
@@ -160,6 +161,36 @@ body.clean .tools:hover, body.clean .tools:focus-within { opacity: 1; }
 #loading .box { text-align: center; color: var(--muted); font-size: 13px; }
 #loading .spin { width: 42px; height: 42px; margin: 0 auto 14px; border-radius: 50%; border: 4px solid var(--chip-hover); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* 游玩模式：只留主机和一条细细的状态栏 */
+body.play .brand, body.play .panel, body.play .hint, body.play .tools, body.play .menu-btn, body.play .tags, body.play .tooltip {
+  opacity: 0 !important; pointer-events: none !important; visibility: hidden;
+}
+.playbar {
+  position: fixed; z-index: 12; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; padding: 5px 5px 5px 14px; font-size: 12.5px; white-space: nowrap;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); opacity: 0.35; transition: opacity .3s;
+}
+.playbar[hidden] { display: none; }
+.playbar.lit, .playbar:hover, .playbar:focus-within { opacity: 1; }
+.playbar .tool { box-shadow: none; border-radius: 999px; padding: 6px 12px; }
+.pb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(255, 106, 31, 0.18); flex: none; }
+.pb-text small { color: var(--muted); margin-left: 6px; }
+.play-tip {
+  position: fixed; z-index: 12; left: 50%; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 8px);
+  display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; max-width: calc(100vw - 32px); font-size: 13px;
+  background: var(--panel-solid); color: var(--text); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+  opacity: 0; transition: opacity .3s, transform .3s;
+}
+.play-tip[hidden] { display: none; }
+.play-tip.show { opacity: 1; transform: translate(-50%, 0); }
+.play-tip .chip { flex: none; padding: 7px 12px; }
+@media (max-width: 760px) {
+  .playbar { bottom: auto; top: calc(12px + env(safe-area-inset-top, 0px)); }
+  .pb-text small { display: none; }
+  .play-tip { bottom: auto; top: calc(96px + env(safe-area-inset-top, 0px)); }
+}
 
 /* 开机动画：等待开机时的遮罩；动画进行中把周围的界面藏起来，结束后淡入 */
 .intro {
@@ -262,7 +293,7 @@ dialog .close { float: right; }
 
   <h2>视角</h2>
   <div class="grid">
-    <button class="chip primary wide" data-view="play">游玩视角（正对屏幕）</button>
+    <button class="chip primary wide" data-act="play" aria-pressed="false">进入游玩模式（G）</button>
     <button class="chip" data-view="front">正面</button>
     <button class="chip" data-view="back">背面</button>
     <button class="chip" data-view="hero">斜侧</button>
@@ -319,13 +350,24 @@ dialog .close { float: right; }
   <p class="note">鼠标：左键拖动旋转，滚轮朝指针方向缩放，右键平移，双击任意部件拉近。点击 3D 按键就是按下它；拖动摇杆可以推动摇杆。也支持 USB / 蓝牙手柄。</p>
 </aside>
 
-<div class="hint" id="hint">拖动旋转 · 滚轮缩放 · 双击部件拉近 · T 隐藏文字 · F 放大游戏机</div>
+<div class="hint" id="hint">拖动旋转 · 滚轮缩放 · 双击拉近 · G 游玩模式 · T 隐藏文字 · F 放大</div>
 <nav class="tools" id="tools" aria-label="显示工具">
+  <button class="tool accent" id="tPlay" title="游玩模式：锁定镜头、主机铺满窗口，专心玩游戏（快捷键 G）">游玩模式</button>
   <button class="tool" id="tText" aria-pressed="false" title="隐藏周围文字（快捷键 T）">隐藏文字</button>
   <button class="tool" id="tFill" aria-pressed="false" title="放大游戏机，铺满窗口（快捷键 F）">放大游戏机</button>
   <button class="tool sq" id="tZoomIn" title="放大一点" aria-label="放大一点">＋</button>
   <button class="tool sq" id="tZoomOut" title="缩小一点" aria-label="缩小一点">－</button>
 </nav>
+<div class="playbar" id="playbar" hidden role="status">
+  <span class="pb-dot"></span><span class="pb-text">游玩模式 · 镜头已锁定<small>鼠标只用来按键和点屏幕</small></span>
+  <button class="tool" id="playFull">全屏</button>
+  <button class="tool" id="playExit">退出（Esc）</button>
+</div>
+<div class="play-tip" id="playTip" hidden role="status">
+  <span>想专心玩？<b>游玩模式</b>会锁定镜头，拖动、滚轮都不会再转动主机</span>
+  <button class="chip primary" id="playTipGo">进入（G）</button>
+  <button class="collapse" id="playTipClose" aria-label="关闭提示">✕</button>
+</div>
 <div class="tooltip" id="tooltip"></div>
 <div class="tags" id="tags"></div>
 <div class="shots" id="shots"></div>
@@ -335,7 +377,7 @@ dialog .close { float: right; }
   <h3>键盘按键对照</h3>
   <div class="keys" id="helpKeys"></div>
   <p class="note">ABXY 用 I / J / K / L 菱形排列，和右 Joy-Con 上的位置一一对应：上 X、左 Y、下 B、右 A。</p>
-  <p class="note">网页快捷键：<kbd>T</kbd> 隐藏 / 显示周围文字，<kbd>F</kbd> 放大游戏机（再按一次恢复），<kbd>?</kbd> 打开这张表。</p>
+  <p class="note">网页快捷键：<kbd>G</kbd> 进入 / 退出游玩模式（镜头锁定，<kbd>Esc</kbd> 也能退出），<kbd>T</kbd> 隐藏 / 显示周围文字，<kbd>F</kbd> 放大游戏机（再按一次恢复），<kbd>?</kbd> 打开这张表。</p>
 </dialog>
 
 <div class="intro" id="intro" hidden>

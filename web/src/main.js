@@ -237,13 +237,14 @@ function visibleUp(o) {
 const pointers = new Map();
 stageEl.addEventListener('pointerdown', (e) => {
   os?.unlockAudio();
-  tween.cancel();
+  if (!play) tween.cancel();                      // 游玩模式下镜头由程序摆放，点按键不打断
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   const hit = pick(e.clientX, e.clientY);
   const sp = screenPoint(hit);
   if (sp) screenTaps.set(e.pointerId, { ...sp, x0: e.clientX, y0: e.clientY });
   const part = hit && device.partOf(hit.object);
   if (!part || part.kind === 'info') return;      // 交给 OrbitControls 旋转视角
+  if (play && !PLAY_PARTS.has(part.kind)) return; // 游玩模式：拆手柄、开支架、插底座这些都不响应
   e.stopPropagation();
   e.preventDefault();
   stageEl.setPointerCapture(e.pointerId);
@@ -302,6 +303,7 @@ stageEl.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // 双击：拉近到点击的位置
 stageEl.addEventListener('dblclick', (e) => {
+  if (play) return;
   const hit = pick(e.clientX, e.clientY);
   if (!hit || screenPoint(hit)) return;
   const part = device.partOf(hit.object);
@@ -321,6 +323,13 @@ function updateHover() {
   const hit = pointers.size ? null : pick(hover.x, hover.y);
   let part = hit ? device.partOf(hit.object) : null;
   if (!part && hit && hit.object === tv?.userData.panel) part = { kind: 'info', label: '电视（TV 模式画面）' };
+  if (play) {
+    // 游玩模式：只高亮能按的按键 / 摇杆，不弹提示框
+    const usable = part && PLAY_PARTS.has(part.kind);
+    device.setHover(usable ? device.highlightMeshes(part) : []);
+    stageEl.style.cursor = usable || screenPoint(hit) ? 'pointer' : 'default';
+    return hideTooltip();
+  }
   device.setHover(part && part.kind !== 'info' ? device.highlightMeshes(part) : []);
   stageEl.style.cursor = (part && part.kind !== 'info') || screenPoint(hit) ? 'pointer' : '';
   if (!part) return hideTooltip();
@@ -379,12 +388,12 @@ function syncChips() {
   const state = {
     joyL: !device.joycons.L?.attached, joyR: !device.joycons.R?.attached,
     kickstand: !!device.toggles.kickstand?.open, cardcover: !!device.toggles.cardcover?.open,
-    dock: device.docked, explode: device.exploded, tags: tagsOn, spin: controls.autoRotate, wire: !!device.wire, touch: touchpad.visible,
+    dock: device.docked, explode: device.exploded, play: !!play, tags: tagsOn, spin: controls.autoRotate, wire: !!device.wire, touch: touchpad.visible,
   };
   const labels = {
     joyL: ['拆下左 Joy-Con', '装上左 Joy-Con'], joyR: ['拆下右 Joy-Con', '装上右 Joy-Con'],
     kickstand: ['打开支架', '收起支架'], cardcover: ['打开卡槽盖', '合上卡槽盖'],
-    dock: ['放入底座', '取出主机'], explode: ['爆炸视图', '合上部件'],
+    dock: ['放入底座', '取出主机'], explode: ['爆炸视图', '合上部件'], play: ['进入游玩模式（G）', '退出游玩模式'],
   };
   for (const c of chips) {
     const k = c.dataset.act;
@@ -407,6 +416,7 @@ for (const c of chips) {
     if (k === 'wire') { device.wire = !device.wire; device.setWireframe(device.wire); stage.setAO(!device.wire); }
     if (k === 'theme') toggleTheme();
     if (k === 'intro') replayIntro();
+    if (k === 'play') setPlay(!play);
     if (k === 'touch') touchpad.visible = !touchpad.visible;
     if (k === 'photo') savePhoto();
     if (k === 'full') toggleFullscreen();
@@ -610,15 +620,100 @@ function zoomStep(k) {
   off.setLength(d);
   tween.to(controls.target.clone().add(off).toArray(), controls.target.toArray(), 0.3);
 }
+$('#tPlay').addEventListener('click', (e) => { setPlay(true); e.currentTarget.blur(); });
 tText.addEventListener('click', () => { setClean(!document.body.classList.contains('clean')); tText.blur(); });
 tFill.addEventListener('click', () => { setFill(tFill.getAttribute('aria-pressed') !== 'true'); tFill.blur(); });
 $('#tZoomIn').addEventListener('click', (e) => { zoomStep(0.8); e.currentTarget.blur(); });
 $('#tZoomOut').addEventListener('click', (e) => { zoomStep(1.25); e.currentTarget.blur(); });
 window.addEventListener('keydown', (e) => {
   if (help.open || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.code === 'KeyG') { setPlay(!play); return; }
+  if (play) { if (e.key === 'Escape') setPlay(false); return; }   // 游玩模式下其他网页快捷键都不响应
   if (e.code === 'KeyT') setClean(!document.body.classList.contains('clean'));
   if (e.code === 'KeyF') setFill(tFill.getAttribute('aria-pressed') !== 'true');
 });
+
+// ------------------------------------------------------------------ 游玩模式
+// 镜头锁定并让主机（或底座模式下的电视）铺满窗口，鼠标拖动 / 滚轮 / 双击都不再转动主机；
+// 只有按键、摇杆和触摸屏能点，拆手柄、开支架、插底座这类会“动到主机本身”的操作暂时停用。
+const PLAY_PARTS = new Set(['button', 'stick']);
+const playBar = $('#playbar');
+let play = null;                 // 进入游玩模式前的镜头和设置，退出时恢复
+let playBarTimer = 0;
+
+function playFrame(duration = 0.7) {
+  if (device.docked && tv) {
+    const c = tv.position.clone();
+    const d = fitDistance(camera, 4.6, (4.6 * 9) / 16, 1.02);
+    tween.to([c.x, c.y, c.z + 0.04 + d], c.toArray(), duration);
+    return;
+  }
+  const c = handheldCenter();
+  const loose = !device.joycons.L?.attached || !device.joycons.R?.attached;   // 手柄拆下来时多留点地方
+  const d = fitDistance(camera, loose ? 3.4 : 2.4, loose ? 1.2 : 1.03, 1.03);
+  tween.to([c.x, c.y, c.z + d], c.toArray(), duration);
+}
+
+function flashPlayBar() {
+  playBar.classList.add('lit');
+  clearTimeout(playBarTimer);
+  playBarTimer = setTimeout(() => playBar.classList.remove('lit'), 3200);
+}
+
+function setPlay(on) {
+  if (!device || on === !!play) return;
+  if (on && intro.stage !== 'idle') return;
+  if (on) {
+    const back = fillBack || { pos: camera.position.toArray(), tgt: controls.target.toArray() };
+    play = { pos: back.pos, tgt: back.tgt, spin: controls.autoRotate };
+    if (fillBack) setFill(false);
+    if (device.exploded) device.setExploded(false);
+    controls.autoRotate = false;
+    controls.enabled = false;
+    pointers.clear();
+    if (isNarrow()) setPanel(false);
+    document.body.classList.add('play');
+    hidePlayTip();
+    hideTooltip();
+    device.setHover([]);
+    onResize();
+    playFrame();
+    playBar.hidden = false;
+    flashPlayBar();
+  } else {
+    controls.enabled = true;
+    controls.autoRotate = play.spin;
+    document.body.classList.remove('play');
+    stageEl.style.cursor = '';
+    playBar.hidden = true;
+    onResize();
+    tween.to(play.pos, play.tgt, 0.7);
+    play = null;
+  }
+  syncChips();
+}
+window.addEventListener('resize', () => { if (play) playFrame(0.01); });
+$('#playExit').addEventListener('click', () => setPlay(false));
+$('#playFull').addEventListener('click', (e) => { toggleFullscreen(); e.currentTarget.blur(); });
+playBar.addEventListener('pointerenter', flashPlayBar);
+
+// 第一次在普通模式下开始玩游戏时，提示一下有游玩模式
+const playTip = $('#playTip');
+let playTipTimer = 0;
+function maybeShowPlayTip() {
+  if (play || intro.stage !== 'idle') return;
+  try { if (localStorage.getItem('switch3d-playtip')) return; localStorage.setItem('switch3d-playtip', '1'); } catch (e) { /* ignore */ }
+  playTip.hidden = false;
+  requestAnimationFrame(() => playTip.classList.add('show'));
+  playTipTimer = setTimeout(hidePlayTip, 9000);
+}
+function hidePlayTip() {
+  clearTimeout(playTipTimer);
+  playTip.classList.remove('show');
+  setTimeout(() => { if (!playTip.classList.contains('show')) playTip.hidden = true; }, 300);
+}
+$('#playTipGo').addEventListener('click', () => setPlay(true));
+$('#playTipClose').addEventListener('click', hidePlayTip);
 
 // ------------------------------------------------------------------ 开机动画
 // 页面打开时主机是关着的，两只 Joy-Con 放在两边。点“开机”（或按任意键、等几秒）后：
@@ -793,6 +888,7 @@ function frame(now) {
     if (os.appName !== lastApp) {
       lastApp = os.appName;
       ui.app.textContent = lastApp;
+      if (os.state === 'app' && os.app?.constructor.meta.kind === 'game') maybeShowPlayTip();
     }
     ui.live.classList.toggle('off', !os.screenOn);
   }
