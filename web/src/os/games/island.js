@@ -76,13 +76,13 @@ function nightLevel(h) {
   if (h < 6.2) return 1 - (h - 4.5) / 1.7;
   return 0;
 }
-function rainyDay(day) {
+export function rainyDay(day) {
   if (day <= 1) return null;
   const r = mulberry32(day * 7919 + 13);
   if (r() > 0.27) return null;
   return { start: 5 + Math.floor(r() * 10), dur: 4 + Math.floor(r() * 10) };
 }
-function isRaining(day, h) {
+export function isRaining(day, h) {
   const a = rainyDay(day), b = rainyDay(day - 1);
   if (a && h >= a.start && h < a.start + a.dur) return true;
   if (b && b.start + b.dur > 24 && h < b.start + b.dur - 24) return true;
@@ -146,6 +146,7 @@ export class Island extends GameBase {
     super(os);
     this.A = assets();
     this.parts = new Particles(260);
+    this.fx2 = new Particles(160);      // 屏幕坐标的特效（彩纸）
     this.nav = new Nav(0.3, 0.09);
     this.s = this.load();
     this.titleSel = 0;
@@ -358,7 +359,8 @@ export class Island extends GameBase {
     this.modeT += dt;
     if (this.mode === 'title') return this.updateTitle(dt, pad);
     this.parts.update(dt);
-    for (const tt of this.toasts) tt.t += dt;
+    this.fx2.update(dt);
+    if (this.menu !== 'inv' && this.menu !== 'dex') for (const tt of this.toasts) tt.t += dt;
     this.toasts = this.toasts.filter((tt) => tt.t < 2.6);
     for (const f of this.floaters) f.t += dt;
     this.floaters = this.floaters.filter((f) => f.t < 1.2);
@@ -474,8 +476,12 @@ export class Island extends GameBase {
     return [this.p.x + dx * dist, this.p.y + dy * dist * 0.8 - (dy < 0 ? 8 : 0)];
   }
   nearNPC() {
-    let best = null, bd = 70;
-    for (const n of this.npcs) { const d = Math.hypot(n.x - this.p.x, (n.y - this.p.y) * 1.2); if (d < bd) { bd = d; best = n; } }
+    const [fx, fy] = this.front(30);
+    let best = null, bd = 1e9;
+    for (const n of this.npcs) {
+      const dp = Math.hypot(n.x - this.p.x, (n.y - this.p.y) * 1.2), df = Math.hypot(n.x - fx, (n.y - fy) * 1.2);
+      if ((df < 44 || dp < 34) && dp < bd) { bd = dp; best = n; }
+    }
     return best;
   }
   nearDoor() {
@@ -506,8 +512,8 @@ export class Island extends GameBase {
   }
   onDeckPoint(x, y) { return onDeck(x, y); }
   contextHint() {
-    if (this.nearNPC()) return '对话';
     const d = this.nearDoor();
+    if (this.nearNPC() && (!d || d === 'mailbox' || d === 'sign')) return '对话';
     if (d === 'shop') return '进入小松茶铺';
     if (d === 'museum') return '进入博物馆';
     if (d === 'house') return '回家';
@@ -521,9 +527,9 @@ export class Island extends GameBase {
   }
 
   actA() {
-    const n = this.nearNPC();
-    if (n) return this.talk(n);
     const d = this.nearDoor();
+    const n = this.nearNPC();
+    if (n && (!d || d === 'mailbox' || d === 'sign')) return this.talk(n);
     if (d === 'shop') {
       if (this.hour < 6) { this.say('shop', ['（门上挂着牌子：营业时间 6:00 — 24:00）']); return; }
       return this.openMenu('shop');
@@ -1192,7 +1198,7 @@ export class Island extends GameBase {
   updatePopup(dt, pad) {
     const P = this.popup;
     P.t += dt;
-    if (P.party && Math.random() < dt * 20) this.parts.emit(W / 2 + (Math.random() - 0.5) * 700, 90, 2, { color: ['#ff8a1c', '#ffd23f', '#4fae55', '#4f8fd0', '#ff6a8a'], speed: 140, life: 1.6, gravity: 260, size: 8 });
+    if (P.party && Math.random() < dt * 20) this.fx2.emit(W / 2 + (Math.random() - 0.5) * 700, 90, 2, { color: ['#ff8a1c', '#ffd23f', '#4fae55', '#4f8fd0', '#ff6a8a'], speed: 140, life: 1.6, gravity: 260, size: 8 });
     if (P.t > 0.45 && (pad.pressed.A || pad.pressed.B)) {
       this.popup = null;
       this.sfx.play('confirm');
@@ -1324,7 +1330,7 @@ export class Island extends GameBase {
     if (this.mtab === 0 && pad.pressed.Y) {
       let sum = 0, n = 0;
       s.inv = s.inv.filter((it) => { if (it.k === 'furn') return true; sum += this.sellPrice(it); n++; return false; });
-      if (n) { this.addCoins(sum, 640, 120); this.sfx.play('coin'); this.shopLine = `全部收下啦！一共 ${fmt(sum)} 茶币，谢谢惠顾！`; this.persist(); }
+      if (n) { this.addCoins(sum, 1120, 150); this.sfx.play('coin'); this.shopLine = `全部收下啦！一共 ${fmt(sum)} 茶币，谢谢惠顾！`; this.persist(); }
       else this.shopLine = '背包里好像没有能卖的东西哦。';
       return;
     }
@@ -1332,7 +1338,7 @@ export class Island extends GameBase {
     const e = list[this.msel];
     if (this.mtab === 0) {
       s.inv.splice(e.i, 1);
-      this.addCoins(e.price, 640, 120);
+      this.addCoins(e.price, 1120, 150);
       this.sfx.play('coin');
       const d = this.itemDef(e.it);
       this.shopLine = e.price >= 1500 ? `哇！${d.name}！这个可值钱了，${fmt(e.price)} 茶币！` : `${d.name}，${fmt(e.price)} 茶币收下了！`;
@@ -1345,13 +1351,13 @@ export class Island extends GameBase {
       e.up.apply(s);
       this.sfx.play('powerup');
       this.shopLine = `${e.up.name}，好好用哦！`;
-      this.floaters.push({ text: '-' + fmt(e.price), t: 0, x: 640, y: 120 });
+      this.floaters.push({ text: '-' + fmt(e.price), t: 0, x: 1120, y: 150 });
     } else {
       if (!this.addItem({ k: 'furn', id: e.furn.id })) { this.sfx.play('deny'); this.shopLine = '背包满了，先腾点地方吧！'; return; }
       s.coins -= e.price;
       this.sfx.play('coin');
       this.shopLine = `${e.furn.name}，已经放进背包了！回家按 A 就能摆。`;
-      this.floaters.push({ text: '-' + fmt(e.price), t: 0, x: 640, y: 120 });
+      this.floaters.push({ text: '-' + fmt(e.price), t: 0, x: 1120, y: 150 });
     }
     this.persist();
   }
@@ -1531,6 +1537,7 @@ export class Island extends GameBase {
     else if (this.menu === 'museum') this.drawMuseum(c);
     else {
       this.drawWorld(c, this.camX, this.camY);
+      this.parts.draw(c, this.camX, this.camY);
       this.drawHUD(c);
       if (this.menu === 'inv') this.drawInv(c);
       if (this.menu === 'dex') this.drawDex(c);
@@ -1538,7 +1545,6 @@ export class Island extends GameBase {
     this.drawToasts(c);
     if (this.dlg) this.drawDialog(c);
     if (this.popup) this.drawPopup(c);
-    this.parts.draw(c, this.menu ? 0 : this.camX, this.menu ? 0 : this.camY);
     if (this.sleepT > 0) {
       const a = this.sleepT < 1.2 ? this.sleepT / 1.2 : this.sleepT > 1.8 ? Math.max(0, 1 - (this.sleepT - 1.8) / 0.8) : 1;
       c.fillStyle = `rgba(10,12,30,${a.toFixed(3)})`;
@@ -1839,12 +1845,14 @@ export class Island extends GameBase {
   }
 
   drawToasts(c) {
+    this.fx2.draw(c);
     for (const f of this.floaters) {
       const a = 1 - f.t / 1.2;
       c.globalAlpha = Math.max(0, Math.min(1, a * 1.5));
       outlineText(c, f.text, f.x + 40, f.y - f.t * 30, 22, f.text[0] === '-' ? '#ff6a5a' : '#ffd23f', 'rgba(60,40,20,0.8)', 5, 'center', 900);
       c.globalAlpha = 1;
     }
+    if (this.menu === 'inv' || this.menu === 'dex') return;
     this.toasts.forEach((tt, i) => {
       const a = Math.min(1, tt.t / 0.2, (2.6 - tt.t) / 0.4);
       const y = 140 + i * 46 - (1 - Math.min(1, tt.t / 0.25)) * 14;
@@ -2235,7 +2243,7 @@ export class Island extends GameBase {
     if (lvl === 0 && R.floor === 1) { fillRR(c, x0 + rw - cell * 0.9, y0 + 10, cell * 0.8, cell * 1.6, 20, '#4f8fd0'); fillRR(c, x0 + rw - cell * 0.85, y0 + 16, cell * 0.7, cell * 0.4, 14, '#ffffff'); }
     // 家具
     const list = [...this.roomList()].sort((a, b) => a.y - b.y);
-    for (const f of list) drawFurniture(c, f.id, x0 + f.x * cell + cell / 2, y0 + f.y * cell + cell - 6, cell * 0.95, this.t);
+    for (const f of list) drawFurniture(c, f.id, x0 + f.x * cell + cell / 2, y0 + f.y * cell + cell - 6, cell * 1.3, this.t);
     // 光标
     const blink = 0.6 + 0.4 * Math.sin(this.t * 6);
     strokeRR(c, x0 + R.cx * cell + 4, y0 + R.cy * cell + 4, cell - 8, cell - 8, 12, `rgba(255,138,60,${blink.toFixed(2)})`, 4);
