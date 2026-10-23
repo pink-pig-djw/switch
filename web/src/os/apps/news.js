@@ -9,11 +9,29 @@ import { Shooter } from '../games/shooter.js';
 import { Breakout } from '../games/breakout.js';
 import { Game2048 } from '../games/g2048.js';
 import { Snake } from '../games/snake.js';
+import { Kart } from '../games/kart.js';
+import { Turf } from '../games/turf.js';
+import { Brawl } from '../games/brawl.js';
+import { Island } from '../games/island.js';
 
-const GAME_LIST = [PixelAdventure, Blocks, Mines, Pong, Shooter, Breakout, Game2048, Snake];
+const GAME_LIST = [PixelAdventure, Kart, Turf, Brawl, Island, Blocks, Mines, Pong, Shooter, Breakout, Game2048, Snake];
 const tileOf = (id) => GAME_LIST.find((g) => g.meta.id === id);
 
 const ARTICLES = [
+  {
+    title: '新作上架：《茶杯卡丁车》《泼彩大作战》',
+    tag: '新游戏',
+    tiles: ['kart', 'turf'],
+    color: ['#ff9a3c', '#2bb5d8'],
+    body: '《茶杯卡丁车》：三条赛道、六位水果车手。转弯时按住 R 漂移，火花变紫再松开冲得最快；L 使用道具。\n《泼彩大作战》：四对四涂地，两分钟内地盘大的一方赢。按住 B 潜进颜色里游动回墨，R 扔炸弹，X 放必杀。',
+  },
+  {
+    title: '新作上架：《茶室大乱斗》《茶岛生活》',
+    tag: '新游戏',
+    tiles: ['brawl', 'island'],
+    color: ['#5a4fd0', '#4fae55'],
+    body: '《茶室大乱斗》：伤害越高飞得越远，把对手打出场外！方向 + A / B 出不同招式，按住 Y 蓄力，ZL / ZR 防御。\n《茶岛生活》：钓鱼、捉虫、摇果树换茶币，还清贷款把帐篷升级成两层茶屋，再把图鉴集满。会自动存档。',
+  },
   {
     title: '新作上架：《橙子大冒险》',
     tag: '新游戏',

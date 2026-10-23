@@ -362,7 +362,7 @@ export class Match {
       if (L.who && L.who !== f && L.who.alive && L.who.ledge === L) continue;
       const handX = f.x - L.side * (f.w / 2);
       const outside = L.side < 0 ? f.x < L.x : f.x > L.x;
-      if (!outside || Math.abs(handX - L.x) > 42) continue;
+      if (!outside || Math.abs(handX - L.x) > 56) continue;
       const handY = f.y - f.h;
       if (handY < L.y - 40 || handY > L.y + 46) continue;
       L.who = f;

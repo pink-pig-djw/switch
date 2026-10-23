@@ -354,12 +354,27 @@ export class Brain {
     c.jmp = true;
     if (!this.recov) this.recov = { fail: this.rng() < d.fail, t: 0 };
     this.recov.t++;
+    // 被打到平台正下方：先往外侧绕出来，不然往上冲会撞到平台底面
+    const hw = f.w * 0.3 + 6;
+    const under = f.x > M.x1 - hw && f.x < M.x2 + hw && f.y - f.h > M.y + 6;
+    if (under) {
+      const out = f.x < (M.x1 + M.x2) / 2 ? -1 : 1;
+      c.x = out;
+      if (f.state === 'helpless' || f.state === 'move' || f.state === 'adodge') return;
+      if (f.jumps > 0 && f.vy > 300 && f.y > M.y + M.depth + 260) c.jmpP = true;
+      return;
+    }
     if (f.state === 'helpless' || f.state === 'move' || f.state === 'adodge') return;
-    if (f.jumps > 0 && f.vy > -80 && (below > -70 || dist > 280)) { c.jmpP = true; return; }
     if (this.recov.fail && this.recov.t > 20) return;
     const reach = RECOVER_REACH[f.ch.id];
-    if (dist > 300 && below < 30 && !f.used.s && f.ch.id !== 'rabbit' && f.vy > -200) { c.x = toward; c.spP = true; return; }
-    if (f.jumps === 0 && !f.used.u && f.vy > -120 && (below > -30 || dist > reach * 0.6)) {
+    // 先用侧必杀拉近水平距离，二段跳留到快掉到平台高度时再用，最后上必杀
+    if (dist > 240 && below < 160 && below > -500 && !f.used.s && f.ch.id !== 'rabbit' && f.vy > -300 && f.kbx * toward >= -100) {
+      c.x = toward;
+      c.spP = true;
+      return;
+    }
+    if (f.jumps > 0 && f.vy > -60 && (below > -140 || (dist > 480 && below > -320))) { c.jmpP = true; return; }
+    if (f.jumps === 0 && !f.used.u && f.vy > -150 && (below > -60 || dist > reach * 0.8)) {
       c.y = 1;
       c.x = 0;
       c.spP = true;

@@ -314,7 +314,7 @@ export class Fighter {
       this.fastFall = true;
       this.vy = Math.max(this.vy, ch.ffall * 0.85);
     }
-    const maxV = ch.air * (free ? 1 : 0.6);
+    const maxV = ch.air * (free ? 1 : 0.75);
     if (Math.abs(c.x) > 0.2) this.vx = approach(this.vx, c.x * maxV, ch.airAcc * STEP);
     else this.vx *= 0.985;
   }
