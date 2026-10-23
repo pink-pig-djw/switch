@@ -6,10 +6,22 @@ import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'dist', 'index.html');
+
+// GLB 先 gzip 再内嵌（约 3 MB → 1.3 MB），网页里用 three.js 自带的 fflate 解压，不依赖 WebAssembly
+const gzipGlb = {
+  name: 'gzip-glb',
+  setup(b) {
+    b.onLoad({ filter: /\.glb$/ }, (args) => ({
+      contents: zlib.gzipSync(fs.readFileSync(args.path), { level: 9 }),
+      loader: 'binary',
+    }));
+  },
+};
 
 async function build() {
   const t0 = Date.now();
@@ -19,7 +31,7 @@ async function build() {
     format: 'iife',
     minify: true,
     target: ['es2020'],
-    loader: { '.glb': 'binary' },
+    plugins: [gzipGlb],
     charset: 'utf8',
     legalComments: 'none',
     write: false,

@@ -32,6 +32,7 @@ const PAUSE_ITEMS = ['继续游戏', '重新开始', '退出到 HOME'];
 export class ConsoleOS {
   constructor({ canvas }) {
     this.canvas = canvas;
+    this.scale = 1;          // 画布分辨率倍数：所有绘制仍按 1280×720 的逻辑坐标，靠变换放大
     if (canvas.width !== W) canvas.width = W;
     if (canvas.height !== H) canvas.height = H;
     this.ctx = canvas.getContext('2d');
@@ -109,6 +110,17 @@ export class ConsoleOS {
     }
   }
 
+  // 提高画布分辨率（1 = 1280×720，2 = 2560×1440），拉近看屏幕时文字和像素更清楚。返回是否有变化
+  setResolution(scale) {
+    scale = clamp(Math.round(scale * 2) / 2, 1, 2);
+    if (scale === this.scale) return false;
+    this.scale = scale;
+    this.canvas.width = Math.round(W * scale);
+    this.canvas.height = Math.round(H * scale);
+    this.draw();
+    return true;
+  }
+
   unlockAudio() {
     this.sfx.unlock();
   }
@@ -119,8 +131,8 @@ export class ConsoleOS {
     if (this.joycon[side] === attached) return;
     this.joycon[side] = attached;
     this.sfx.play('click', { minGap: 0 });
-    // 参照真机：从屏幕左 / 右边缘滑出手柄小图标
-    this.joyNotice = { side, attached, t: 0 };
+    // 参照真机：从屏幕左 / 右边缘滑出手柄小图标（关机 / 开机画面中不显示）
+    if (this.screenOn && this.state !== 'boot') this.joyNotice = { side, attached, t: 0 };
   }
 
   // 触摸屏：x / y 为 1280×720 画布像素坐标
@@ -292,11 +304,33 @@ export class ConsoleOS {
     }, 0.16, 0.26);
   }
 
-  finishBoot() {
+  finishBoot(fromBoot = false) {
     this.transition(() => {
       this.state = 'home';
-      this.home.onEnter();
+      this.home.onEnter(fromBoot);
     }, 0.3, 0.4);
+  }
+
+  // 立即关机（不播放转场），viewer 的开机动画从这里开始
+  powerOffNow() {
+    this._killApps();
+    this.fade = null;
+    this.power = { down: false, t: 0, long: false, ignore: false };
+    this.state = 'off';
+  }
+
+  // 跳过开机动画，直接进入 HOME
+  skipToHome() {
+    if (this.state !== 'off' && this.state !== 'boot') return;
+    this.fade = null;
+    this.boot.done = true;
+    this.state = 'home';
+    this.home.onEnter(true);
+  }
+
+  // 静默设置手柄连接状态（不弹提示、不出声）
+  setJoyConSilent(side, attached) {
+    if (side === 'L' || side === 'R') this.joycon[side] = !!attached;
   }
 
   _updateApp(dt, p) {
@@ -580,7 +614,17 @@ export class ConsoleOS {
     this.captureReq = false;
     let url;
     try {
-      url = this.canvas.toDataURL('image/jpeg', 0.9);
+      // 截图固定 1280×720（和真机一样），高分辨率画布先缩小
+      let src = this.canvas;
+      if (this.scale !== 1) {
+        src = document.createElement('canvas');
+        src.width = W;
+        src.height = H;
+        const sc = src.getContext('2d');
+        sc.imageSmoothingQuality = 'high';
+        sc.drawImage(this.canvas, 0, 0, W, H);
+      }
+      url = src.toDataURL('image/jpeg', 0.9);
     } catch (e) {
       this.toast('截图失败');
       return;
@@ -645,8 +689,9 @@ export class ConsoleOS {
   // ———————————————————— 绘制 ————————————————————
   draw() {
     const c = this.ctx;
+    const s = this.scale;
+    c.setTransform(s, 0, 0, s, 0, 0);
     c.save();
-    c.setTransform(1, 0, 0, 1, 0, 0);
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
     switch (this.state) {

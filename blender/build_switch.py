@@ -109,9 +109,26 @@ def material(name, hexcol, rough=0.5, metal=0.0, coat=0.0, coat_rough=0.05,
     return m
 
 
+def add_grain(name, scale, strength, distance=0.02):
+    """Cycles 渲染用的细微颗粒凹凸（glTF 不导出程序化节点，网页端另有法线贴图）。"""
+    m = MAT[name]
+    nt = m.node_tree
+    bsdf = nt.nodes['Principled BSDF']
+    tc = nt.nodes.new('ShaderNodeTexCoord')
+    nz = nt.nodes.new('ShaderNodeTexNoise')
+    nz.inputs['Scale'].default_value = scale
+    nz.inputs['Detail'].default_value = 3.0
+    bp = nt.nodes.new('ShaderNodeBump')
+    bp.inputs['Strength'].default_value = strength
+    bp.inputs['Distance'].default_value = distance
+    nt.links.new(tc.outputs['Object'], nz.inputs['Vector'])
+    nt.links.new(nz.outputs['Fac'], bp.inputs['Height'])
+    nt.links.new(bp.outputs['Normal'], bsdf.inputs['Normal'])
+
+
 def make_materials():
-    material('JoyBlue', '#00b8e6', rough=0.42, coat=0.15, coat_rough=0.35)
-    material('JoyRed', '#ff4436', rough=0.42, coat=0.15, coat_rough=0.35)
+    material('JoyBlue', '#00b8e6', rough=0.46)
+    material('JoyRed', '#ff4436', rough=0.46)
     material('Body', '#36373b', rough=0.58)
     material('BodyEdge', '#2e2f33', rough=0.5)
     material('Glass', '#050506', rough=0.04, coat=1.0, coat_rough=0.02, spec=0.6)
@@ -136,6 +153,10 @@ def make_materials():
     material('DockGloss', '#101012', rough=0.12, coat=0.6, coat_rough=0.08)
     material('Rubber', '#141416', rough=0.85)
     material('DockLED', '#18361f', rough=0.3, emit='#000000', emit_strength=0.0)
+
+    for name, sc, st in (('JoyBlue', 1.6, 0.06), ('JoyRed', 1.6, 0.06), ('Body', 1.2, 0.08), ('Dock', 1.0, 0.1),
+                         ('StickCap', 3.0, 0.12)):
+        add_grain(name, sc, st)
 
     # 屏幕：底色纯黑 + 自发光贴图（网页查看器会换成实时画布）
     m = material('Screen', '#000000', rough=0.06, coat=1.0, coat_rough=0.02)
@@ -250,27 +271,12 @@ def poly_c(pts):
 # --------------------------------------------------------------------------
 # bmesh 构建工具
 # --------------------------------------------------------------------------
-def rslab(profile, w0, w1, r0=0.0, r1=0.0, n0=4, n1=4, sharp_caps=True):
-    """沿局部 W 轴把轮廓挤出成实体，两端可做圆角。
-    profile(d) 返回内缩 d 后的 (u, v) 逆时针轮廓。"""
-    levels = []
-    if r0 > 0:
-        for i in range(n0 + 1):
-            p = (pi / 2) * i / n0
-            levels.append((w0 + r0 * (1 - cos(p)), r0 * (1 - sin(p))))
-    else:
-        levels.append((w0, 0.0))
-    if r1 > 0:
-        for i in range(n1, -1, -1):
-            p = (pi / 2) * i / n1
-            levels.append((w1 - r1 * (1 - cos(p)), r1 * (1 - sin(p))))
-    else:
-        levels.append((w1, 0.0))
+def loft(profile, levels, sharp_caps=True):
+    """按 levels = [(w, d), ...] 把轮廓放样成封闭实体：在高度 w 处取内缩 d 的轮廓（d 为负则外扩）。"""
     lv = []
     for L in levels:
         if not lv or abs(L[0] - lv[-1][0]) > 1e-7 or abs(L[1] - lv[-1][1]) > 1e-7:
             lv.append(L)
-
     bm = bmesh.new()
     loops = []
     for (w, d) in lv:
@@ -293,6 +299,36 @@ def rslab(profile, w0, w1, r0=0.0, r1=0.0, n0=4, n1=4, sharp_caps=True):
             for e in f.edges:
                 e.smooth = False
     return bm
+
+
+def rslab(profile, w0, w1, r0=0.0, r1=0.0, n0=4, n1=4, sharp_caps=True):
+    """沿局部 W 轴把轮廓挤出成实体，两端可做圆角。
+    profile(d) 返回内缩 d 后的 (u, v) 逆时针轮廓。"""
+    levels = []
+    if r0 > 0:
+        for i in range(n0 + 1):
+            p = (pi / 2) * i / n0
+            levels.append((w0 + r0 * (1 - cos(p)), r0 * (1 - sin(p))))
+    else:
+        levels.append((w0, 0.0))
+    if r1 > 0:
+        for i in range(n1, -1, -1):
+            p = (pi / 2) * i / n1
+            levels.append((w1 - r1 * (1 - cos(p)), r1 * (1 - sin(p))))
+    else:
+        levels.append((w1, 0.0))
+    return loft(profile, levels, sharp_caps)
+
+
+def flared(profile, depth, fillet, top=1.5, n=4):
+    """开孔用的切割体：深处按轮廓原样，靠近表面时按四分之一圆向外张开 fillet，
+    切出来的孔口就带一圈圆角（真实塑料件的孔边都不是锐边，高光会更自然）。"""
+    levels = [(-depth, 0.0)]
+    for i in range(n + 1):
+        a = (pi / 2) * i / n
+        levels.append((-fillet + fillet * sin(a), -fillet * (1 - cos(a))))
+    levels.append((top, -fillet))
+    return loft(profile, levels)
 
 
 def lathe(profile, steps=48, closed=False):
@@ -336,7 +372,7 @@ def box_bm(x0, x1, y0, y1, z0, z1):
     return bm
 
 
-def cyl_bm(r, w0, w1, n=24):
+def cyl_bm(r, w0, w1, n=32):
     return rslab(circle_c(r, n), w0, w1)
 
 
@@ -529,6 +565,30 @@ def smooth_by_angle(ob, angle=33):
     bm.free()
 
 
+def box_uv(ob, scale=10.0):
+    """盒投影 UV：按面的朝向投到 XY / XZ / YZ 平面，1 个 UV 单位 = scale 毫米。
+    网页端的表面纹理（塑料颗粒、金属拉丝）靠它贴图。"""
+    me = ob.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    uv = bm.loops.layers.uv.verify()
+    off = world_loc(ob)
+    for f in bm.faces:
+        n = f.normal
+        ax = max(range(3), key=lambda i: abs(n[i]))
+        for lp in f.loops:
+            p = lp.vert.co + off
+            if ax == 0:
+                u, v = p.y, p.z
+            elif ax == 1:
+                u, v = p.x, p.z
+            else:
+                u, v = p.x, p.y
+            lp[uv].uv = (u / scale, v / scale)
+    bm.to_mesh(me)
+    bm.free()
+
+
 def text_bm(txt, size, depth, bold=0.0):
     """文字 → bmesh（局部 XY 平面居中，Z 从 0 到 depth）。"""
     cu = bpy.data.curves.new('tmp_text', 'FONT')
@@ -581,7 +641,7 @@ def flat_poly_bm(pts, h0, h1):
 # --------------------------------------------------------------------------
 # 通用按键形状
 # --------------------------------------------------------------------------
-def round_button(r, top, base, fillet=0.55, dome=0.15, seg=40):
+def round_button(r, top, base, fillet=0.55, dome=0.15, seg=72):
     """圆形按键（局部 W 向外），顶面略微隆起。返回 (bmesh, 顶面函数)。"""
     rf = r - fillet
 
@@ -590,11 +650,11 @@ def round_button(r, top, base, fillet=0.55, dome=0.15, seg=40):
         return top + dome * (1 - (rr / rf) ** 2)
 
     prof = [(0.0, top + dome)]
-    for i in range(1, 7):
-        rr = rf * i / 6
+    for i in range(1, 9):
+        rr = rf * i / 8
         prof.append((rr, surf(rr)))
-    for i in range(1, 7):
-        a = (pi / 2) * (1 - i / 6)
+    for i in range(1, 9):
+        a = (pi / 2) * (1 - i / 8)
         prof.append((rf + fillet * cos(a), top - fillet + fillet * sin(a)))
     prof.append((r, base))
     prof.append((0.0, base))
@@ -640,7 +700,7 @@ def build_console(root):
 
     # ---- 机身 ----
     prof = lambda d: rrect(-XC, XC, -ZT + d, ZT - d)
-    bm = rslab(prof, YF + 0.45, YB, RF, RB, 5, 9)
+    bm = rslab(prof, YF + 0.45, YB, RF, RB, 7, 12)
     place(bm, 'shell')
     body = new_obj('Console_Body', bm, ['Body'])
 
@@ -650,7 +710,7 @@ def build_console(root):
     # 顶部：电源键、音量键凹槽
     tops = [('POWER', -66.0, 6.8), ('VOL_DOWN', -55.0, 5.6), ('VOL_UP', -47.4, 5.6)]
     for _, x, w in tops:
-        c = rslab(pill_c(w + 0.5, 3.0), -1.6, 1.0)
+        c = flared(pill_c(w + 0.5, 3.0, 10), 1.6, 0.28)
         place(c, 'top', (x, yc, ZT))
         cuts.append(cutter(c, 'Gap'))
 
@@ -661,7 +721,7 @@ def build_console(root):
         cuts.append(cutter(c, 'PortBlack'))
         x += 1.45
     # 3.5mm 耳机孔
-    c = cyl_bm(1.95, -8.0, 1.0, 28)
+    c = flared(circle_c(1.95, 40), 8.0, 0.35)
     place(c, 'top', (33.0, yc, ZT))
     cuts.append(cutter(c, 'PortBlack'))
     # 游戏卡槽：盖板凹位 + 卡槽开口
@@ -672,7 +732,7 @@ def build_console(root):
     cuts.append(cutter(c, 'PortBlack'))
 
     # 底部 USB-C
-    c = rslab(pill_c(8.9, 3.2), -6.0, 1.0)
+    c = flared(pill_c(8.9, 3.2, 12), 6.0, 0.35)
     place(c, 'bottom', (0.0, yc, -ZT))
     cuts.append(cutter(c, 'MetalDark'))
 
@@ -863,7 +923,7 @@ def build_glass(con):
 # --------------------------------------------------------------------------
 # Joy-Con
 # --------------------------------------------------------------------------
-def band_profile(sgn, x_start, a_end, r_out, r_in, seg=14):
+def band_profile(sgn, x_start, a_end, r_out, r_in, seg=22):
     """顶边 + 外侧转角的带状轮廓（肩键/扳机用），可内缩。
     sgn = -1 左 / +1 右；x_start 为带子内侧端点到中心的距离（绝对值）；
     a_end 为绕外侧转角走到的角度（90° = 顶边，180° = 外侧竖边）。"""
@@ -898,10 +958,10 @@ def build_joycon(root, side):
 
     # ---- 外壳 ----
     if side == 'L':
-        prof = lambda d: rrect(x_out + d, x_in, -ZT + d, ZT - d, (JR - d, 0, 0, JR - d), 22)
+        prof = lambda d: rrect(x_out + d, x_in, -ZT + d, ZT - d, (JR - d, 0, 0, JR - d), 36)
     else:
-        prof = lambda d: rrect(x_in, x_out - d, -ZT + d, ZT - d, (0, JR - d, JR - d, 0), 22)
-    bm = rslab(prof, YF, YB, RF, RB, 5, 9)
+        prof = lambda d: rrect(x_in, x_out - d, -ZT + d, ZT - d, (0, JR - d, JR - d, 0), 36)
+    bm = rslab(prof, YF, YB, RF, RB, 7, 12)
     place(bm, 'shell')
     shell = new_obj(f'JoyCon_{side}_Shell', bm, [col])
 
@@ -911,13 +971,13 @@ def build_joycon(root, side):
     cuts = []
 
     def pocket(profile_fn, x, z, depth=2.0, mat='Gap'):
-        c = rslab(profile_fn, -depth, 1.5)
+        c = flared(profile_fn, depth, 0.3)
         place(c, 'front', (x, YF, z))
         cuts.append(cutter(c, mat))
 
     # 摇杆孔
     stick_x, stick_z = (xc, z_up) if side == 'L' else (xc, z_lo)
-    c = cyl_bm(10.2, -5.0, 1.5, 48)
+    c = flared(circle_c(10.2, 96), 5.0, 0.7)
     place(c, 'front', (stick_x, YF, stick_z))
     cuts.append(cutter(c, 'Gap'))
 
@@ -929,7 +989,7 @@ def build_joycon(root, side):
     else:
         quad = [('X', 0, off), ('B', 0, -off), ('Y', -off, 0), ('A', off, 0)]
     for _, dx, dz in quad:
-        pocket(circle_c(3.98, 40), xc + dx, dia_z + dz)
+        pocket(circle_c(3.98, 64), xc + dx, dia_z + dz)
 
     # − / + 、截图 / HOME
     if side == 'L':
@@ -937,7 +997,7 @@ def build_joycon(root, side):
         pocket(rrect_c(6.2, 6.2, 1.5), xi, -36.5)
     else:
         pocket(cross_c(6.6, 2.6, 0.5), xi, 43.6)
-        pocket(circle_c(4.45, 40), xi, -36.5)
+        pocket(circle_c(4.45, 64), xi, -36.5)
 
     # 肩键 L/R 与扳机 ZL/ZR 的凹位
     Lc = rslab(band_profile(s, XC + 2.9, 152, JR + 3.0, JR - 3.05), -6.3, -0.6)
@@ -948,7 +1008,7 @@ def build_joycon(root, side):
     cuts.append(cutter(Zc, 'Gap'))
 
     # 背面解锁按钮孔
-    c = cyl_bm(2.45, -1.5, 1.0, 28)
+    c = flared(circle_c(2.45, 40), 1.5, 0.25)
     place(c, 'back', (s * (XC + 4.2), YB, 38.0))
     cuts.append(cutter(c, 'Gap'))
 
@@ -1010,7 +1070,7 @@ def build_joycon(root, side):
         place(bm, 'front', (xi, YF, -36.5))
         ob = new_obj('Btn_HOME', bm, ['ButtonGrey', 'Print'], parent=jc, btn='HOME', label='HOME 键')
         ob['press'] = gl((0, 0.7, 0))
-        ring = lathe([(3.62, 0.04), (4.3, 0.04), (4.3, -1.0), (3.62, -1.0)], 48, closed=True)
+        ring = lathe([(3.62, 0.04), (4.3, 0.04), (4.3, -1.0), (3.62, -1.0)], 72, closed=True)
         place(ring, 'front', (xi, YF, -36.5))
         new_obj('HomeRing', ring, ['HomeRing'], parent=jc, info='HOME 键指示灯环')
 
@@ -1075,7 +1135,7 @@ def build_stick(jc, side, x, z):
         t = tmax * i / 24
         dome.append((Ri * sin(t), Ri * cos(t)))
     dome.append((0.0, Ri))
-    bm_dome = lathe(dome, 64)
+    bm_dome = lathe(dome, 96)
     # 摇杆轴
     bm_shaft = lathe([(0, R - 0.4), (2.55, R - 0.4), (2.55, face + 6.1), (2.2, face + 6.3), (0, face + 6.3)], 32)
     # 摇杆帽：凹面 + 同心纹 + 外沿
@@ -1090,7 +1150,7 @@ def build_stick(jc, side, x, z):
     cap += [(6.15, top - 0.02), (6.6, top), (7.0, top - 0.06), (7.35, top - 0.25),
             (7.6, top - 0.6), (7.7, top - 1.0), (7.7, face + 6.7), (7.5, face + 6.3),
             (7.1, face + 6.1), (0.0, face + 6.1)]
-    bm_cap = lathe(cap, 64)
+    bm_cap = lathe(cap, 96)
     bm = combine((bm_dome, 1), (bm_shaft, 1), (bm_cap, 0))
     place(bm, 'front')
     ob = new_obj(f'Stick_{side}_Mesh', bm, ['StickCap', 'StickDome'], loc=piv)
@@ -1317,6 +1377,10 @@ def main():
     build_joycon(root, 'R')
     if '--no-dock' not in ARGV:
         build_dock(root)
+
+    for ob in bpy.data.objects:
+        if ob.type == 'MESH' and ob.name != 'Console_Glass':      # 屏幕玻璃保留屏幕区域的 UV
+            box_uv(ob)
 
     os.makedirs(os.path.dirname(OUT_GLB), exist_ok=True)
     bpy.ops.export_scene.gltf(

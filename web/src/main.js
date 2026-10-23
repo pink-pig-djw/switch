@@ -1,8 +1,10 @@
 // 入口：加载 Blender 导出的模型，接上主机系统（屏幕里的游戏）、键盘 / 鼠标 / 手柄输入和界面。
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import glbData from '../assets/switch.glb';
+import { gunzipSync } from 'three/addons/libs/fflate.module.js';
+import glbData from '../assets/switch.glb';     // 构建时已 gzip 压缩（见 scripts/build.mjs）
 import { createStage, CameraTween, fitDistance, GROUND_Y } from './scene.js';
+import { applyLook, makeSurfaces, contactShadow } from './look.js';
 import { Device } from './device.js';
 import { Input, KEY_HELP } from './input.js';
 import { ConsoleOS } from './os/index.js';
@@ -25,7 +27,8 @@ const TAG_OF = {
 
 const $ = (s) => document.querySelector(s);
 const stageEl = $('#stage');
-const { renderer, scene, camera, controls, onResize } = createStage(stageEl);
+const stage = createStage(stageEl);
+const { renderer, scene, camera, controls, onResize } = stage;
 const tween = new CameraTween(camera, controls);
 const input = new Input(window);
 const raycaster = new THREE.Raycaster();
@@ -44,16 +47,20 @@ const ui = {
 
 // ------------------------------------------------------------------ 模型
 function loadModel() {
-  const buf = glbData.buffer.slice(glbData.byteOffset, glbData.byteOffset + glbData.byteLength);
+  const raw = gunzipSync(glbData);
+  const buf = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
   new GLTFLoader().parse(buf, '', (gltf) => {
     device = new Device(gltf.scene);
+    applyLook(device.pickables, makeSurfaces(renderer));
     scene.add(device.root);
     setupScreen();
     setupTV();
+    setupContactShadow();
     device.on('dock', onDockChange);
     device.on('joycon', () => syncChips());
     device.on('toggle', () => syncChips());
-    view('hero', 0.01);
+    if (introWanted()) introPrepare(true);
+    else view('hero', 0.01);
     requestAnimationFrame(() => $('#loading').classList.add('done'));
   }, (err) => {
     console.error(err);
@@ -99,6 +106,53 @@ function setupTV() {
   scene.add(tv);
 }
 
+// 地面上的柔和接触阴影：平时在掌机正下方，插进底座后收窄到底座下面
+let blob = null;
+function setupContactShadow() {
+  blob = contactShadow();
+  blob.position.y = GROUND_Y + 0.002;
+  scene.add(blob);
+}
+const tmpDock = new THREE.Vector3();
+function updateContactShadow() {
+  if (!blob || !device) return;
+  const c = handheldCenter();
+  const k = device.dock ? THREE.MathUtils.smoothstep(device.dockT, 0, 0.35) : 0;
+  if (device.dock) device.dock.getWorldPosition(tmpDock); else tmpDock.copy(c);
+  blob.position.x = THREE.MathUtils.lerp(c.x, tmpDock.x, k);
+  blob.position.z = THREE.MathUtils.lerp(c.z, tmpDock.z - 0.096, k);
+  blob.scale.set(THREE.MathUtils.lerp(1, 0.67, k), THREE.MathUtils.lerp(1, 0.79, k), 1);
+  blob.material.opacity = THREE.MathUtils.lerp(0.42, 0.7, k) * (device.exploded ? 0.6 : 1);
+}
+
+// 屏幕画面清晰度：屏幕在窗口里显示得够大时，把主机系统的画布提高到 2560×1440
+let resCheck = 0;
+const tmpP = new THREE.Vector3();
+function updateScreenResolution(dt) {
+  if (!os || !device) return;
+  resCheck -= dt;
+  if (resCheck > 0) return;
+  resCheck = 0.5;
+  const f = renderer.domElement.height / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const onScreen = (p) => {
+    tmpP.copy(p).project(camera);
+    return Math.abs(tmpP.x) < 1.4 && Math.abs(tmpP.y) < 1.4 && tmpP.z < 1;
+  };
+  let px = 0;
+  const c = handheldCenter();
+  if (!device.docked && onScreen(c)) px = (1.373 * f) / camera.position.distanceTo(c);
+  if (tv?.visible && onScreen(tv.position)) px = Math.max(px, (4.6 * f) / camera.position.distanceTo(tv.position));
+  let want = os.scale;
+  if (px > 1280 * 1.2) want = 2;
+  else if (px < 1280 * 0.9) want = 1;
+  want = Math.min(want, stage.quality.screen);
+  if (os.setResolution(want)) {
+    screenTex.dispose();           // 尺寸变了，显卡上的贴图要重新分配
+    screenTex.needsUpdate = true;
+    syncQuality();
+  }
+}
+
 function onDockChange(docked) {
   syncChips();
   if (docked) {
@@ -129,13 +183,15 @@ const VIEWS = {
   joyr: { dir: [0.3, 0.2, 1], target: [1.0, -0.02, 0], size: [0.62, 1.12], margin: 1.12 },
   sticks: { dir: [-0.1, 0.45, 1], target: [-1.03, 0.22, 0.08], size: [0.42, 0.42], margin: 1.2 },
   explode: { dir: [-0.42, 0.32, 0.85], target: [0, 0.05, 0], size: [3.55, 1.6], margin: 1.12 },
+  introStart: { dir: [0.75, 0.05, 1], target: [0, -0.04, 0], size: [3.5, 1.15], margin: 1.05 },   // 开机动画：起始机位
+  introMid: { dir: [-0.38, 0.16, 1], target: [0, -0.02, 0], size: [2.45, 1.08], margin: 1.2 },
   fill: { dir: [0, 0, 1], target: [0, 0, 0], size: [2.4, 1.03], margin: 1.02 },   // 整台主机铺满窗口
 };
 
 let lastView = 'hero';
-function view(name, duration = 0.9) {
+function view(name, duration = 0.9, ease = null) {
   if (!device) return;
-  lastView = name;
+  if (!name.startsWith('intro')) lastView = name;
   if (name === 'tv') {
     const d = fitDistance(camera, 4.9, 3.5, 1.1);
     tween.to([0, 1.25, -1.0 + d], [0, 0.95, -1.0], duration);
@@ -147,7 +203,7 @@ function view(name, duration = 0.9) {
   const dir = new THREE.Vector3(...v.dir).normalize();
   const dist = fitDistance(camera, v.size[0], v.size[1], v.margin);
   const tgt = new THREE.Vector3(...v.target).add(c);
-  tween.to(tgt.clone().addScaledVector(dir, dist).toArray(), tgt.toArray(), duration);
+  tween.to(tgt.clone().addScaledVector(dir, dist).toArray(), tgt.toArray(), duration, ease);
 }
 
 // ------------------------------------------------------------------ 拾取 & 鼠标操作
@@ -348,8 +404,9 @@ for (const c of chips) {
     if (k === 'explode') { device.setExploded(!device.exploded); view(device.exploded ? 'explode' : 'hero'); }
     if (k === 'tags') tagsOn = !tagsOn;
     if (k === 'spin') controls.autoRotate = !controls.autoRotate;
-    if (k === 'wire') { device.wire = !device.wire; device.setWireframe(device.wire); }
+    if (k === 'wire') { device.wire = !device.wire; device.setWireframe(device.wire); stage.setAO(!device.wire); }
     if (k === 'theme') toggleTheme();
+    if (k === 'intro') replayIntro();
     if (k === 'touch') touchpad.visible = !touchpad.visible;
     if (k === 'photo') savePhoto();
     if (k === 'full') toggleFullscreen();
@@ -369,11 +426,34 @@ function toggleTheme() {
   const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   root.dataset.theme = dark ? 'light' : 'dark';
   try { localStorage.setItem('switch3d-theme', root.dataset.theme); } catch (e) { /* 无痕模式等 */ }
+  stage.refreshBackground();
 }
 try {
   const t = localStorage.getItem('switch3d-theme');
   if (t) document.documentElement.dataset.theme = t;
 } catch (e) { /* ignore */ }
+stage.refreshBackground();
+
+// 画质：自动 / 高 / 中 / 低
+const qualityChips = [...document.querySelectorAll('[data-quality]')];
+function syncQuality() {
+  const q = stage.quality;
+  for (const c of qualityChips) c.setAttribute('aria-pressed', String(c.dataset.quality === q.mode));
+  const parts = [`${q.label}画质`];
+  parts.push(q.ao ? '缝隙柔影' : '无后期');
+  parts.push(`阴影 ${q.shadow / 1024}K`);
+  parts.push(`屏幕 ${os && os.scale > 1 ? '2560×1440' : '1280×720'}`);
+  $('#qualityNote').textContent = (q.mode === 'auto' ? '自动 · ' : '') + parts.join(' · ');
+}
+for (const c of qualityChips) {
+  c.addEventListener('click', () => {
+    stage.setQuality(c.dataset.quality);
+    resCheck = 0;
+    c.blur();
+  });
+}
+stage.onQuality(() => { resCheck = 0; syncQuality(); });
+syncQuality();
 
 // 面板：手机上是底部抽屉（.open），桌面上可以收起到右侧（.collapsed）
 const menuBtn = $('#menuBtn');
@@ -433,7 +513,7 @@ function dataURLToBytes(url) {
 
 async function saveFile(filename, data) {
   if (!IN_ARTIFACT) {
-    const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/png' });
+    const blob = data instanceof Blob ? data : new Blob([data], { type: filename.endsWith('.jpg') ? 'image/jpeg' : 'image/png' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
@@ -466,7 +546,7 @@ function toggleFullscreen() {
 
 // 3D 画面截图（在同一帧里先渲染再读取，不需要 preserveDrawingBuffer）
 function savePhoto() {
-  renderer.render(scene, camera);
+  stage.render();
   renderer.domElement.toBlob((blob) => blob && saveFile(`switch-3d-${stamp()}.png`, blob), 'image/png');
 }
 
@@ -479,7 +559,7 @@ function addShot(url) {
   a.innerHTML = `<img alt="游戏截图"><span></span>`;
   a.querySelector('img').src = url;
   a.querySelector('span').textContent = canSave ? '已截图 · 点击保存' : '已截图 · 在主机相册里查看';
-  a.addEventListener('click', () => { if (canSave) saveFile(`switch-截图-${stamp()}.png`, dataURLToBytes(url)); });
+  a.addEventListener('click', () => { if (canSave) saveFile(`switch-截图-${stamp()}.jpg`, dataURLToBytes(url)); });
   ui.shots.prepend(a);
   while (ui.shots.children.length > 3) ui.shots.lastChild.remove();
   setTimeout(() => (a.style.opacity = '0.85'), 4000);
@@ -540,6 +620,148 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') setFill(tFill.getAttribute('aria-pressed') !== 'true');
 });
 
+// ------------------------------------------------------------------ 开机动画
+// 页面打开时主机是关着的，两只 Joy-Con 放在两边。点“开机”（或按任意键、等几秒）后：
+// 镜头推近 → 左右 Joy-Con 依次滑进滑轨（咔哒声、指示灯闪烁）→ 镜头移到顶部按下电源键 →
+// 屏幕亮起播放系统开机画面 → HOME 磁贴依次入场 → 镜头退到斜侧视角，界面淡入。
+const introEl = $('#intro');
+const intro = { stage: 'idle', t0: 0, steps: [], camFree: false, auto: 0, homeAt: 0 };
+const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+
+function introWanted() {
+  const q = new URLSearchParams(location.search).get('intro');
+  if (q === '0') return false;
+  return !matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// 关机、拆下手柄、镜头到起始机位。first = 页面刚打开（手柄直接摆好，不播动画）
+function introPrepare(first) {
+  intro.stage = first ? 'wait' : 'prep';
+  intro.camFree = false;
+  document.body.classList.add('booting');
+  hideTooltip();
+  os.powerOffNow();
+  for (const side of ['L', 'R']) {
+    const j = device.joycons[side];
+    if (!j) continue;
+    if (first) { j.attached = false; j.t = j.target = 1; j.notified = true; }
+    else device.toggleJoyCon(side, false);
+    os.setJoyConSilent(side, false);
+  }
+  view('introStart', first ? 0.01 : 1.2);
+  if (first) {
+    introEl.hidden = false;
+    requestAnimationFrame(() => introEl.classList.add('show'));
+    intro.auto = performance.now() + 7000;     // 没人操作的话 7 秒后自己开机
+    controls.autoRotate = false;
+  }
+  syncChips();
+}
+
+function powerCloseUp() {
+  const a = device.buttonAnchors().find((b) => b.name === 'POWER');
+  if (!a) return;
+  const pos = a.pos.clone().addScaledVector(a.normal, 0.42).add(new THREE.Vector3(-0.12, 0, 0.62));
+  tween.to(pos.toArray(), a.pos.toArray(), 1.0, easeInOut);
+}
+
+function startIntro() {
+  if (intro.stage !== 'wait' && intro.stage !== 'prep') return;
+  os.unlockAudio();
+  intro.stage = 'run';
+  intro.t0 = performance.now();
+  intro.homeAt = 0;
+  introEl.classList.remove('show');
+  setTimeout(() => { if (intro.stage !== 'wait') introEl.hidden = true; }, 450);
+  const cam = (fn) => () => { if (!intro.camFree) fn(); };
+  intro.steps = [
+    [0.0, cam(() => view('introMid', 2.0, easeInOut))],
+    [0.25, () => device.toggleJoyCon('L', true)],
+    [0.8, () => device.toggleJoyCon('R', true)],
+    [2.15, cam(powerCloseUp)],
+    [3.3, () => input.press('POWER')],
+    [3.6, () => input.release('POWER')],
+    [3.75, cam(() => view('play', 1.5, easeInOut))],
+  ];
+}
+
+function finishIntro() {
+  intro.stage = 'idle';
+  intro.steps = [];
+  intro.homeAt = 0;
+  if (document.body.classList.contains('booting')) {
+    document.body.classList.remove('booting');
+    document.body.classList.add('revealed');
+    setTimeout(() => document.body.classList.remove('revealed'), 1200);
+  }
+  introEl.classList.remove('show');
+  introEl.hidden = true;
+  syncChips();
+}
+
+// 跳过：手柄装好、直接进 HOME、镜头回到斜侧
+function skipIntro() {
+  if (intro.stage === 'idle') return;
+  for (const side of ['L', 'R']) {
+    const j = device.joycons[side];
+    if (!j) continue;
+    j.attached = true; j.t = j.target = 0; j.notified = true;
+    os.setJoyConSilent(side, true);
+  }
+  input.release('POWER');
+  os.skipToHome();
+  view('hero', 0.8);
+  finishIntro();
+}
+
+function replayIntro() {
+  if (!device || intro.stage !== 'idle') return;
+  const wait = device.docked ? 1900 : device.exploded ? 700 : 0;
+  if (device.docked) device.setDocked(false);
+  if (device.exploded) device.setExploded(false);
+  for (const name of ['kickstand', 'cardcover']) if (device.toggles[name]?.open) device.toggle(name, false);
+  if (tFill.getAttribute('aria-pressed') === 'true') setFill(false);
+  intro.stage = 'queued';
+  setTimeout(() => {
+    intro.stage = 'idle';
+    introPrepare(false);
+    setTimeout(startIntro, 1400);              // 等两只手柄滑出去
+  }, wait);
+}
+
+function introUpdate() {
+  if (intro.stage === 'wait' && performance.now() > intro.auto) startIntro();
+  if (intro.stage !== 'run') return;
+  const t = (performance.now() - intro.t0) / 1000;
+  while (intro.steps.length && intro.steps[0][0] <= t) intro.steps.shift()[1]();
+  // 进入 HOME 后让磁贴入场动画播完，再把镜头退到斜侧、显示界面
+  if (!intro.homeAt && os.state === 'home') intro.homeAt = performance.now();
+  if (intro.homeAt && performance.now() - intro.homeAt > 1500) {
+    intro.homeAt = 0;
+    if (!intro.camFree) view('hero', 2.4, easeInOut);
+    finishIntro();
+  }
+  if (t > 40) finishIntro();                    // 保险：无论如何 40 秒后结束
+}
+
+$('#introPower').addEventListener('click', (e) => { e.stopPropagation(); startIntro(); });
+$('#introSkip').addEventListener('click', (e) => { e.stopPropagation(); skipIntro(); });
+$('#skipRun').addEventListener('click', (e) => { skipIntro(); e.currentTarget.blur(); });
+introEl.addEventListener('click', () => startIntro());
+// 等待开机时，任意键 = 开机（这个按键不传给游戏）；动画过程中 Esc = 跳过
+window.addEventListener('keydown', (e) => {
+  if (intro.stage === 'wait' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== 'Tab') {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    startIntro();
+  } else if (intro.stage !== 'idle' && e.key === 'Escape') {
+    skipIntro();
+  }
+}, { capture: true });
+// 开机过程中用户自己转动 / 缩放镜头后，后面的镜头动作就不再抢方向盘
+stageEl.addEventListener('pointerdown', () => { if (intro.stage === 'run') intro.camFree = true; }, { capture: true });
+stageEl.addEventListener('wheel', () => { if (intro.stage === 'run') intro.camFree = true; }, { passive: true });
+
 // ------------------------------------------------------------------ 主循环
 let last = performance.now();
 let lastApp = '';
@@ -553,6 +775,9 @@ function frame(now) {
     os.update(dt, pad);
     if (os.screenOn || (device.screenLevel ?? 1) > 0.005) screenTex.needsUpdate = true;
     device.update(dt, pad, os);
+    introUpdate();
+    updateContactShadow();
+    updateScreenResolution(dt);
     // 屏幕亮度：睡眠 / 插入底座（TV 模式）时熄屏
     const level = os.screenOn ? Math.min(1, 0.25 + 0.88 * os.brightness) : 0;   // 默认亮度 0.85 ≈ 满亮
     const handheldLevel = device.docked && device.dockT > 0.97 ? 0 : level;
@@ -575,11 +800,11 @@ function frame(now) {
   tween.update(dt);
   controls.update(dt);
   updateTags();
-  renderer.render(scene, camera);
+  stage.render(now);
 }
 
 loadModel();
 requestAnimationFrame(frame);
 // 调试 / 自动化测试用
-window.__switch = { get device() { return device; }, get os() { return os; }, camera, controls, view, input };
+window.__switch = { get device() { return device; }, get os() { return os; }, camera, controls, view, input, stage };
 syncChips();

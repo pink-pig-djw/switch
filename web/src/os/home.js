@@ -1,7 +1,7 @@
 // HOME 菜单（参照真机布局，图标与美术均为原创）：
 // 顶栏头像 + 时间/Wi-Fi/电量，中间一排大磁贴，下方一排圆形系统按钮，底栏手柄图标 + 按键提示
 import { GAMES, SYSTEM_APPS } from './registry.js';
-import { W, H, clamp, damp, text, fillRR, strokeRR, rrect, drawHints, Nav, makeCanvas, pad2, easeOutCubic } from './ui.js';
+import { W, H, clamp, damp, text, fillRR, strokeRR, rrect, drawHints, Nav, makeCanvas, pad2, easeOutCubic, easeOutBack } from './ui.js';
 import {
   drawAvatar, drawAvatarTea, drawAvatarCat, lineNews, lineAlbum, lineControllers, lineGear, linePower, iconWifi, iconHandheld,
 } from './icons.js';
@@ -36,8 +36,10 @@ export class Home {
     ];
     this.btnScale = this.buttons.map(() => 1);
     this.tiles = GAMES.map((cls) => {
-      const cv = makeCanvas(TILE, TILE);
+      // 按两倍分辨率缓存，拉近看屏幕（画布 2560×1440）时磁贴上的字也是清楚的
+      const cv = makeCanvas(TILE * 2, TILE * 2);
       const cc = cv.getContext('2d');
+      cc.scale(2, 2);
       try {
         cls.meta.tile(cc, TILE);
       } catch (e) {
@@ -49,9 +51,17 @@ export class Home {
     });
   }
 
-  onEnter() {
+  // fromBoot：开机后第一次进入，磁贴和按钮依次入场；平时从软件返回只做一个快速淡入
+  onEnter(fromBoot = false) {
     this.enterT = 0;
+    this.bootEnter = !!fromBoot;
     this.nav.reset();
+  }
+
+  _enter(delay, dur, back = false) {
+    if (!this.bootEnter) return easeOutCubic(this.enterT / 0.32);
+    const k = clamp((this.enterT - delay) / dur, 0, 1);
+    return back ? easeOutBack(k) : easeOutCubic(k);
   }
 
   tileX(i) {
@@ -157,11 +167,14 @@ export class Home {
     const dark = th.id === 'dark';
     c.fillStyle = th.bg;
     c.fillRect(0, 0, W, H);
-    const enter = easeOutCubic(this.enterT / 0.32);
     const bumpX = this.bump > 0 ? Math.sin(this.bump * Math.PI) * 9 * this.bumpDir : 0;
     const bumpY = this.bump > 0 && this.bumpDir === 0 ? -Math.sin(this.bump * Math.PI) * 7 : 0;
 
     // —— 顶栏：用户头像 ——
+    const topE = this._enter(0.05, 0.45);
+    c.save();
+    c.globalAlpha = topE;
+    c.translate(0, (1 - topE) * -18);
     const avatars = [drawAvatar, drawAvatarTea, drawAvatarCat];
     avatars.forEach((fn, i) => {
       const ax = 76 + i * 82, ay = 62;
@@ -181,12 +194,15 @@ export class Home {
     os._drawBattery(c, 1196, 51, th.text);
     iconWifi(c, 1110, 60, 28, th.text);
     text(c, `${pad2(now.getHours())}:${pad2(now.getMinutes())}`, 1082, 62, 28, th.text, 'right', 500);
+    c.restore();
 
     // —— 磁贴 ——
     c.save();
-    c.globalAlpha = enter;
-    const rowY = ROW_Y + (1 - enter) * 12;
     for (let i = 0; i < GAMES.length; i++) {
+      const enter = this._enter(0.15 + i * 0.07, 0.55);
+      if (enter <= 0) continue;
+      c.globalAlpha = enter;
+      const rowY = ROW_Y + (1 - enter) * (this.bootEnter ? 46 : 12);
       const focus = this.row === 0 && i === this.sel;
       const s = this.tileScale[i];
       const x0 = this.tileX(i) + (focus ? bumpX : 0);
@@ -224,9 +240,12 @@ export class Home {
     for (let i = 0; i < this.buttons.length; i++) {
       const b = this.buttons[i];
       const focus = this.row === 1 && i === this.btnSel;
-      const s = this.btnScale[i];
+      const be = this._enter(0.5 + i * 0.06, 0.45, true);
+      if (be <= 0) continue;
+      c.globalAlpha = clamp(be, 0, 1);
+      const s = this.btnScale[i] * (this.bootEnter ? 0.6 + 0.4 * be : 1);
       const cx = this.btnX(i) + (focus ? bumpX : 0);
-      const cy = BTN_Y + (1 - enter) * 16;
+      const cy = BTN_Y + (1 - clamp(be, 0, 1)) * 16;
       const r = BTN_R * s;
       c.fillStyle = th.shadow;
       c.beginPath();
@@ -250,10 +269,11 @@ export class Home {
         c.beginPath();
         c.arc(cx, cy, r + 7, 0, Math.PI * 2);
         c.stroke();
-        c.globalAlpha = 1;
+        c.globalAlpha = clamp(be, 0, 1);
         text(c, b.name, cx, cy + r + 30, 20, th.selText, 'center', 600);
       }
     }
+    c.globalAlpha = this._enter(0.75, 0.4);
 
     // —— 底栏 ——
     c.fillStyle = th.line;
@@ -266,5 +286,6 @@ export class Home {
       hints.push(['A', '开始']);
     } else hints.push(['A', '确定']);
     drawHints(c, hints, th);
+    c.globalAlpha = 1;
   }
 }
