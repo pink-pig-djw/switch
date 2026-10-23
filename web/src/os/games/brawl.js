@@ -6,7 +6,7 @@ import { parseTrack } from '../audio.js';
 import { STEP, CHARS, STAGES, DIFFS, STAT_NAMES, PLAYER_COLORS, specialNames } from './brawl/data.js';
 import { Match } from './brawl/world.js';
 import {
-  drawFighter, drawCharStatic, drawItem, drawProj, drawMine, drawSaucer, makeBackdrop, makeStageArt, drawPlatform, star,
+  drawFighter, drawCharStatic, drawItem, drawProj, drawMine, drawSaucer, makeBackdrop, makeStageArt, drawPlatform, star, BACK_W, BACK_H,
 } from './brawl/art.js';
 
 const ORANGE = '#ff7a1a';
@@ -320,9 +320,9 @@ export class Brawl extends GameBase {
   }
 
   drawBackdrop(c, art, camX, camY) {
-    c.drawImage(art.back.far, 0, 0, W, H);
-    const b = art.back, ox = -460 - camX * 0.16, oy = -camY * 0.05 + 10;
-    c.drawImage(b.mid, ox, oy + b.midY, b.mid.width, b.mid.height);
+    const ox = clamp(-(BACK_W - W) / 2 - camX * 0.08, W - BACK_W, 0);
+    const oy = clamp(-(BACK_H - H) / 2 - (camY + 170) * 0.04, H - BACK_H, 0);
+    c.drawImage(art.back.img, Math.round(ox), Math.round(oy));   // 整数像素对齐：不用插值，画得更快
   }
 
   // 头像缓存：HUD 和场外提示每帧都要画，画成小图后只需 drawImage
@@ -473,7 +473,7 @@ export class Brawl extends GameBase {
     m.fx.drawScreen(c);
     this.drawOffscreen(c, m);
     this.drawHud(c, m);
-    this.drawBanner(c, m);
+    if (this.mode === 'play') this.drawBanner(c, m);
   }
 
   drawOffscreen(c, m) {

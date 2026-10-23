@@ -700,15 +700,14 @@ export function makeBackdrop(stage) {
     fog.addColorStop(0, 'rgba(240,248,235,0)'); fog.addColorStop(1, 'rgba(240,248,235,0.9)');
     m.fillStyle = fog; m.fillRect(0, 480, 2400, 240);
   }
-  // 中景只保留有内容的那一段高度，少画一大片透明像素
-  const top = { roof: 250, tray: 40, dojo: 0 }[stage.id] || 0;
-  if (top > 0) {
-    const crop = makeCanvas(2400, 720 - top);
-    crop.getContext('2d').drawImage(mid, 0, top, 2400, 720 - top, 0, 0, 2400, 720 - top);
-    return { far, mid: crop, midY: top };
-  }
-  return { far, mid, midY: 0 };
+  // 远景 + 中景合成一张稍大的图，对战时整体随镜头轻微平移（视差），每帧只画一次
+  const img = makeCanvas(BACK_W, BACK_H);
+  const ic = img.getContext('2d');
+  ic.drawImage(far, 0, 0, BACK_W, BACK_H);
+  ic.drawImage(mid, (2400 - BACK_W) / 2, 0, BACK_W, 720, 0, BACK_H - 720, BACK_W, 720);
+  return { far, img };
 }
+export const BACK_W = 1540, BACK_H = 760;
 
 // 主平台：预先画到离屏画布上（2 倍分辨率）
 export function makeStageArt(stage) {

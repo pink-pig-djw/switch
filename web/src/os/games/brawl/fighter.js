@@ -599,13 +599,13 @@ export class Fighter {
         }
       }
     }
-    // 主平台侧面 / 底面
-    const M = st.main;
-    if (ny > M.y + 2 && ny - this.h < M.y + M.depth && nx + this.w / 2 > M.x1 && nx - this.w / 2 < M.x2) {
-      if (px + this.w / 2 <= M.x1 + 2) { nx = M.x1 - this.w / 2; this.vx = Math.min(0, this.vx); this.kbx = -Math.abs(this.kbx) * 0.3; }
-      else if (px - this.w / 2 >= M.x2 - 2) { nx = M.x2 + this.w / 2; this.vx = Math.max(0, this.vx); this.kbx = Math.abs(this.kbx) * 0.3; }
+    // 主平台侧面 / 底面（和地形碰撞时用比身体窄的碰撞盒，走出边缘时不会被“托”回平台上）
+    const M = st.main, hw = this.w * 0.3;
+    if (!this.ground && ny > M.y + 2 && ny - this.h < M.y + M.depth && nx + hw > M.x1 && nx - hw < M.x2) {
+      if (py <= M.y + 2 && nx >= M.x1 && nx <= M.x2) { ny = M.y; this.onLand(M); }
       else if (py - this.h >= M.y + M.depth - 4) { ny = M.y + M.depth + this.h; this.vy = Math.max(0, this.vy); this.kby = Math.abs(this.kby) * 0.3; }
-      else if (py <= M.y + 2) { ny = M.y; this.onLand(M); }
+      else if (nx < (M.x1 + M.x2) / 2) { nx = M.x1 - hw; this.vx = Math.min(0, this.vx); this.kbx = -Math.abs(this.kbx) * 0.3; }
+      else { nx = M.x2 + hw; this.vx = Math.max(0, this.vx); this.kbx = Math.abs(this.kbx) * 0.3; }
     }
     this.x = nx;
     this.y = ny;
